@@ -1,0 +1,18 @@
+make arrows actually move to next image
+add images
+
+images batch grouping
+add names
+
+zoom in/zoom out the stack
+
+click blank/background return to initial, so not zoomed and no extra gap
+
+? maybe make the scroll already gapped
+
+add interface
+- for normal stack (el fotowalk 3 image/text, endmarks, names, info button)
+- for gapped (=)
+- for expanded (nombre, url instagram, titulo imagen, fecha, lugar)
+
+make intro of the unpacking
