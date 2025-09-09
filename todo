@@ -1,18 +1,16 @@
-make arrows actually move to next image
-add images
+BUGS:
+> if you hit the next/prev keys too fast they stay in the same image
+> there a small wobble effect on the expanded image when pressing next/prev keys
+> when expanded, stack shouldnt be clickable
 
-images batch grouping
-add names
+/////
 
 zoom in/zoom out the stack
-
-click blank/background return to initial, so not zoomed and no extra gap
-
-? maybe make the scroll already gapped
 
 add interface
 - for normal stack (el fotowalk 3 image/text, endmarks, names, info button)
 - for gapped (=)
 - for expanded (nombre, url instagram, titulo imagen, fecha, lugar)
+- progress dots of images and persons images when expanded?
 
 make intro of the unpacking
