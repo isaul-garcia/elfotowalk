@@ -1,13 +1,9 @@
 BUGS:
->> scrolling should be disabled when expanded (should not break the next/prev key pressing)
 > if you hit the next/prev keys too fast they stay in the same image
 > there a small wobble effect on the expanded image when pressing next/prev keys
-> when expanded, hover lift seems to remain in effect at the wrong location (where it was before expanding)
+> when expanded, stack shouldnt be clickable
 
 /////
-
-images batch grouping
-add names
 
 zoom in/zoom out the stack
 
@@ -15,6 +11,6 @@ add interface
 - for normal stack (el fotowalk 3 image/text, endmarks, names, info button)
 - for gapped (=)
 - for expanded (nombre, url instagram, titulo imagen, fecha, lugar)
-- progress dots of persons images when expanded?
+- progress dots of images and persons images when expanded?
 
 make intro of the unpacking

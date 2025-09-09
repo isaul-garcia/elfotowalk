@@ -14,6 +14,7 @@ import {
   useScroll,
   Stats,
   useTexture,
+  Html
 } from "@react-three/drei";
 import * as THREE from "three";
 
@@ -41,13 +42,28 @@ type StackCtx = {
   stageGapRef?: React.MutableRefObject<number>;
   stageAt?: (index: number, gapAbs: number) => void;
   clearStage?: () => void;
+  stagedRangeStartRef?: React.MutableRefObject<number | null>;
+  stagedRangeEndRef?: React.MutableRefObject<number | null>;
+  stageRangeAt?: (start: number, end: number, gapAbs: number) => void;
   expandedIndex: number | null;
   expandedIndexRef: React.MutableRefObject<number | null>;
   setExpandedIndex?: (idx: number | null) => void;
   lastExpandedIndexRef: React.MutableRefObject<number | null>;
   expandedSwitchLockRef: React.MutableRefObject<number>;
   navLockRef: React.MutableRefObject<number>;
+  groupIndexMapRef?: React.MutableRefObject<number[] | null>;
+  groupsCountRef?: React.MutableRefObject<number>;
+  groupGapsActiveRef?: React.MutableRefObject<boolean>;
+  focusGroupRef?: React.MutableRefObject<number>;
+  groupNamesRef?: React.MutableRefObject<string[] | null>;
 } | null;
+
+type StackNavApi = {
+  goTo: (index: number, opts?: { animate?: boolean }) => void;
+  goToAndStage: (index: number, gapAbs?: number) => void;
+  goToRangeAndStage: (start: number, end: number, gapAbs?: number) => void; // NEW
+  clearStage: () => void;
+};
 
 const StackScrollContext = React.createContext<StackCtx>(null);
 
@@ -70,9 +86,13 @@ function setTextureSRGB(tex: THREE.Texture) {
 // Main
 // ────────────────────────────────────────────────────────────────────────────────
 export default function ClickableAxonStackDebug() {
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+
   const camRef = useRef<THREE.OrthographicCamera>(null!);
-  const clearStageRef = useRef<(() => void) | null>(null); 
+  const clearStageRef = useRef<(() => void) | null>(null);
   const collapseExpandedRef = useRef<(() => void) | null>(null);
+
+  const navApiRef = useRef<StackNavApi | null>(null);
 
   const IMAGES = useMemo<string[]>(
     () => Array.from({ length: 52 }, (_, i) => `/stack-images/${String(i).padStart(3, "0")}.jpg`),
@@ -90,6 +110,39 @@ export default function ClickableAxonStackDebug() {
     if (!DEBUG) return;
     console.log("Images list (first 5):", IMAGES.slice(0, 5), "total:", IMAGES.length);
   }, [IMAGES]);
+
+  const ANCHORS = useMemo(() => {
+    const safe = (i: number) => Math.max(0, Math.min(planeCount - 1, i));
+    return [
+      { name: "Isa", indices: [safe(0), safe(11)] },
+      { name: "Tom", indices: [safe(12), safe(22)] },
+      { name: "Pepo", indices: [safe(23), safe(30)] },
+      { name: "Dia", indices: [safe(31), safe(46)] },
+      { name: "Ule", indices: [safe(47), safe(51)] },
+    ];
+  }, [planeCount]);
+
+  const GROUP_RANGES = useMemo<[number, number][]>(() => {
+    return ANCHORS.map(({ indices }) => {
+      const [a, b] = indices;
+      return [Math.min(a, b), Math.max(a, b)] as [number, number];
+    });
+  }, [ANCHORS]);
+
+  const GROUP_NAMES = useMemo<string[]>(() => ANCHORS.map(a => a.name), [ANCHORS]);
+
+  const expandedName = useMemo(() => {
+    if (expandedIdx == null) return null;
+    // find which group range contains the expanded index
+    for (let gi = 0; gi < GROUP_RANGES.length; gi++) {
+      const [s, e] = GROUP_RANGES[gi];
+      if (expandedIdx >= s && expandedIdx <= e) {
+        return ANCHORS[gi].name;
+      }
+    }
+    return null;
+  }, [expandedIdx, GROUP_RANGES, ANCHORS]);
+
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
@@ -126,7 +179,18 @@ export default function ClickableAxonStackDebug() {
               0,
             ]}
           >
-            <LocalZScroller planes={planeCount} gap={GAP} overshoot={0.0} ease={0.08} clearStageExternalRef={clearStageRef} collapseExpandedExternalRef={collapseExpandedRef}>
+            <LocalZScroller
+              planes={planeCount}
+              gap={GAP}
+              overshoot={0.0}
+              ease={0.08}
+              clearStageExternalRef={clearStageRef}
+              collapseExpandedExternalRef={collapseExpandedRef}
+              navApiExternalRef={navApiRef}
+              groupRanges={GROUP_RANGES}
+              groupNames={GROUP_NAMES}
+              onExpandedChange={setExpandedIdx}
+            >
               <KeyboardNavigator planes={planeCount} />
               <AxonStack
                 images={IMAGES}
@@ -141,8 +205,62 @@ export default function ClickableAxonStackDebug() {
           </group>
         </ScrollControls>
 
-        {DEBUG && <Stats showPanel={0} className="r3f-stats" />}
+        {/* {DEBUG && <Stats showPanel={0} className="r3f-stats" />} */}
       </Canvas>
+      <div
+        aria-hidden={expandedIdx !== null}
+        style={{
+          opacity: expandedIdx !== null ? 0 : 1,
+          pointerEvents: expandedIdx !== null ? "none" : "auto",
+          transition: "opacity 150ms ease",
+          position: "absolute",
+          bottom: 22,
+          right: 22,
+          display: "flex",
+          flexDirection: "column",
+          textAlign: "right",
+          gap: 8,
+          zIndex: 10,
+          userSelect: "none",
+          fontFamily: "system-ui, sans-serif",
+          background: "rgba(255,255,255,0.85)",
+          padding: "14px 16px",
+        }}
+      >
+        {ANCHORS.map((a) => {
+          const [start, end] = a.indices;
+          return (
+            <button
+              key={a.name}
+              onClick={() => navApiRef.current?.goToRangeAndStage(start, end, 1)}
+              style={{ cursor: "pointer", border: "none", textAlign: "right", padding: 0, backgroundColor: "#00000000", fontSize: "20px" }}
+              title={`${a.name} (${start}–${end})`}
+            >
+              {a.name}
+            </button>
+          );
+        })}
+      </div>
+
+      {expandedName && (
+        <div
+          style={{
+            padding: "4px 8px",
+            marginBottom: 6,
+            borderRadius: 8,
+            fontSize: 20,
+            fontWeight: 600,
+            letterSpacing: "0.3px",
+            color: "#000",
+            pointerEvents: "none",
+            position: "absolute",
+            top: 150,
+            left: 50
+          }}
+        >
+          {expandedName}
+        </div>
+      )}
     </div>
   );
 }
@@ -244,7 +362,7 @@ function Card({
   useEffect(() => {
     const img = tex.image as HTMLImageElement | undefined;
     if (!img) return;
-  
+
     const apply = () => {
       if (DEBUG) console.log("✅ texture loaded:", src, img.width, img.height);
       imgSizeRef.current = { w: img.width || 0, h: img.height || 0 };
@@ -252,20 +370,20 @@ function Card({
     const fail = () => {
       if (DEBUG) console.error("❌ texture failed:", src);
     };
-  
+
     // If the image is already available (cache), record immediately
     if ((img as any).complete && img.width && img.height) {
       apply();
     }
-  
+
     img.addEventListener?.("load", apply as any);
     img.addEventListener?.("error", fail as any);
     return () => {
       img.removeEventListener?.("load", apply as any);
       img.removeEventListener?.("error", fail as any);
     };
-  }, [tex, src]);  
-  
+  }, [tex, src]);
+
 
   const baseZ = useMemo(() => index * gap, [index, gap]);
 
@@ -285,14 +403,16 @@ function Card({
     if (!ref.current) return;
 
     const isCenter = (ctx?.centerIndexRef?.current ?? -1) === index;
-    const stagedIdx = ctx?.stagedIndexRef?.current;
+    const stagedIdx = ctx?.stagedIndexRef?.current ?? null;
+    const rangeStart = ctx?.stagedRangeStartRef?.current ?? null;
+    const rangeEnd = ctx?.stagedRangeEndRef?.current ?? null;
     const stageGapAbs = ctx?.stageGapRef?.current ?? 0;
     const g = ctx?.gap ?? gap;
 
     const switchLock = ctx?.expandedSwitchLockRef?.current ?? 0;
     const lastExpanded = ctx?.lastExpandedIndexRef?.current ?? null;
     const snapNow = expanded && switchLock > 0;
-    
+
     const targetFit = expanded ? 1 : 0;
     if (snapNow) {
       fitTRef.current = 1;                 // instant contain on switch
@@ -328,7 +448,10 @@ function Card({
     }
 
     if (waitingToStage && isCenter) {
-      ctx?.stageAt?.(index, CARD_STAGE_GAP_ABS);
+      // If group gaps are active, do NOT single-stage; just center (and the lift will apply).
+      if (!ctx?.groupGapsActiveRef?.current) {
+        ctx?.stageAt?.(index, CARD_STAGE_GAP_ABS);
+      }
       setWaitingToStage(false);
     }
 
@@ -370,7 +493,7 @@ function Card({
         CARD_SCALE_EXPANDED * (iw > 0 ? THREE.MathUtils.lerp(1, containFy, fitTRef.current) : 1),
         1
       );
-    
+
       if (switchLock > 0) {
         ref.current.position.copy(tmpLocal);
         ref.current.scale.copy(anisotropicTarget);     // snap scale on switch
@@ -399,14 +522,33 @@ function Card({
     if (Math.abs(ref.current.position.x) < 1e-4) ref.current.position.x = 0;
 
     let stageOffset = 0;
-    if (stagedIdx != null && g > 0) {
-      const k = stagedIdx;
-      const delta = Math.max(0, stageGapAbs - g);
-      if (index > k) stageOffset = +delta;
-      else if (index < k) stageOffset = -delta;
+    const delta = Math.max(0, stageGapAbs - g);
+
+    // 1) If SINGLE or RANGE staging is active, it takes PRECEDENCE
+    if (g > 0) {
+      if (rangeStart !== null && rangeEnd !== null) {
+        if (index < rangeStart) stageOffset = -delta;
+        else if (index > rangeEnd) stageOffset = +delta;
+        // inside range: 0
+      } else if (stagedIdx !== null) {
+        if (index > stagedIdx) stageOffset = +delta;
+        else if (index < stagedIdx) stageOffset = -delta;
+        // staged index: 0
+      } else if (ctx?.groupGapsActiveRef?.current && (ctx?.stageGapRef?.current ?? 0) > 0) {
+        // 2) Otherwise, apply GROUP gaps
+        const map = ctx.groupIndexMapRef?.current;
+        const gi = map ? map[index] : -1;
+        if (gi >= 0) {
+          const focusG = ctx.focusGroupRef?.current ?? 0;
+          stageOffset = (gi - focusG) * delta;
+        }
+      }
     }
 
-    const isStaged = stagedIdx === index;
+    const isStagedSingle = stagedIdx === index;
+    const isStagedRange = (rangeStart !== null && rangeEnd !== null) ? (index >= rangeStart && index <= rangeEnd) : false;
+    const isStaged = isStagedSingle || isStagedRange;
+
     const navLock = ctx?.navLockRef?.current ?? 0;
     const shouldLift = !isStaged && (navLock > 0 ? isCenter : (hovered || isCenter));
     const targetY = shouldLift ? lift : 0;
@@ -447,14 +589,31 @@ function Card({
   const handleClick = useCallback(() => {
     const isCenter = (ctx?.centerIndexRef?.current ?? -1) === index;
     const isStagedHere = (ctx?.stagedIndexRef?.current ?? null) === index;
+    const groupGapsOn = !!ctx?.groupGapsActiveRef?.current;
 
     if (expanded) {
       ctx?.setExpandedIndex?.(null);
       return;
     }
+
+    // If group gaps are active:
+    //  - 1st click (not centered) => center only (no single staging)
+    //  - 2nd click (centered)     => expand
+    if (groupGapsOn) {
+      if (!isCenter) {
+        ctx?.centerOn?.(index);
+        setWaitingToStage(false);   // don't arm single-stage
+        return;
+      }
+      // Already centered under group-gaps -> expand
+      ctx?.setExpandedIndex?.(index);
+      return;
+    }
+
+    // Group gaps OFF → legacy single-stage behavior.
     if (!isCenter) {
       ctx?.centerOn?.(index);
-      setWaitingToStage(true);
+      setWaitingToStage(true);      // will stage when it becomes center
       return;
     }
     if (!isStagedHere) {
@@ -509,8 +668,12 @@ function LocalZScroller({
   start = 0,
   end = 1,
   snapEndThreshold = 0.995,
-  clearStageExternalRef, 
+  clearStageExternalRef,
   collapseExpandedExternalRef,
+  navApiExternalRef,
+  groupRanges,
+  groupNames,
+  onExpandedChange,
 }: {
   children: React.ReactNode;
   distance?: number;
@@ -523,6 +686,10 @@ function LocalZScroller({
   snapEndThreshold?: number;
   clearStageExternalRef?: React.MutableRefObject<(() => void) | null>;
   collapseExpandedExternalRef?: React.MutableRefObject<(() => void) | null>;
+  navApiExternalRef?: React.MutableRefObject<StackNavApi | null>;
+  groupRanges?: [number, number][];
+  groupNames?: string[];
+  onExpandedChange?: (idx: number | null) => void;
 }) {
   const ref = useRef<THREE.Group>(null!);
   const scroll = useScroll();
@@ -546,6 +713,39 @@ function LocalZScroller({
   const expandedSwitchLockRef = useRef<number>(0);
   const navLockRef = useRef<number>(0);
 
+  const pendingStageIndexRef = useRef<number | null>(null);   // NEW
+  const pendingStageGapRef = useRef<number>(1);
+
+  const stagedRangeStartRef = useRef<number | null>(null);
+  const stagedRangeEndRef = useRef<number | null>(null);
+  const stagedRangeSpanRef = useRef<number>(0);
+
+  // pending “stage-after-arrive” for ranges
+  const pendingStageRangeRef = useRef<{ start: number; end: number; gapAbs: number } | null>(null);
+
+  const groupIndexMap = useMemo(() => {
+    if (!groupRanges || !planes) return null;
+    const map = new Array(planes).fill(-1);
+    groupRanges.forEach(([s, e], gi) => {
+      for (let i = s; i <= e && i < planes; i++) map[i] = gi;
+    });
+    return map as number[];
+  }, [groupRanges, planes]);
+
+  const groupIndexMapRef = useRef<number[] | null>(null);
+  useEffect(() => { groupIndexMapRef.current = groupIndexMap; }, [groupIndexMap]);
+
+  const groupsCountRef = useRef<number>(groupRanges?.length ?? 0);
+  useEffect(() => { groupsCountRef.current = groupRanges?.length ?? 0; }, [groupRanges]);
+
+  // Always-on multi-range staging flag + the focused group id
+  const groupGapsActiveRef = useRef<boolean>(false);
+  const focusGroupRef = useRef<number>(0);
+
+  const groupNamesRef = useRef<string[] | null>(null);
+  useEffect(() => { groupNamesRef.current = groupNames ?? null; }, [groupNames]);
+
+
   const centerOn = useCallback(
     (index: number, opts?: { animate?: boolean }) => {
       if (!planes || !gap) return;
@@ -562,14 +762,38 @@ function LocalZScroller({
     [planes, gap, autoDistance, start, end, scroll]
   );
 
+  const stageRangeAt = useCallback((start: number, end: number, gapAbs: number) => {
+    // clear single index mode
+    stagedIndexRef.current = null;
+
+    // clamp and order
+    const maxIdx = (planes ?? 1) - 1;
+    const s = Math.max(0, Math.min(maxIdx, Math.min(start, end)));
+    const e = Math.max(0, Math.min(maxIdx, Math.max(start, end)));
+
+    stagedRangeStartRef.current = s;
+    stagedRangeEndRef.current = e;
+    stagedRangeSpanRef.current = e - s; // span length (e.g., 1 for two panels)
+    stageGapRef.current = Math.max(0, gapAbs);
+  }, [planes]);
+
   const stageAt = useCallback((index: number, gapAbs: number) => {
     stagedIndexRef.current = index;
     stageGapRef.current = Math.max(0, gapAbs);
   }, []);
 
   const clearStage = useCallback(() => {
+    // legacy single/range staging
     stagedIndexRef.current = null;
+    stagedRangeStartRef.current = null;
+    stagedRangeEndRef.current = null;
+    stagedRangeSpanRef.current = 0;
     stageGapRef.current = 0;
+
+    // ALSO turn off group-gaps mode
+    if (typeof (groupGapsActiveRef?.current) === "boolean") {
+      groupGapsActiveRef.current = false;
+    }
   }, []);
 
 
@@ -578,7 +802,8 @@ function LocalZScroller({
   const setExpandedIndex = useCallback((idx: number | null) => {
     expandedIndexRef.current = idx;
     setExpandedIndexState(idx);
-  }, []);
+    onExpandedChange?.(idx);
+  }, [onExpandedChange]);
 
   const collapseExpanded = useCallback(() => {
     if (expandedIndexRef.current != null) {
@@ -601,6 +826,91 @@ function LocalZScroller({
     return () => { collapseExpandedExternalRef.current = null; };
   }, [collapseExpandedExternalRef, collapseExpanded]);
 
+  useEffect(() => {
+    const el = (scroll as any).el as HTMLElement | undefined;
+    if (!el) return;
+
+    const onWheel = (e: WheelEvent) => {
+      // Only block when something is expanded
+      if (expandedIndexRef.current != null) {
+        e.preventDefault();
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (expandedIndexRef.current != null) {
+        e.preventDefault();
+      }
+    };
+
+    // must be passive:false to allow preventDefault
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+
+    return () => {
+      el.removeEventListener("wheel", onWheel as any);
+      el.removeEventListener("touchmove", onTouchMove as any);
+    };
+  }, [scroll]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (expandedIndexRef.current == null) return;
+      // block common page-scrolling keys; keep ArrowLeft/Right untouched
+      const k = e.key;
+      if (k === "PageDown" || k === "PageUp" || k === " " || k === "ArrowUp" || k === "ArrowDown") {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener("keydown", onKey, { passive: false });
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (!navApiExternalRef) return;
+
+    const clampIndex = (i: number) =>
+      Math.max(0, Math.min((planes ?? 1) - 1, i));
+
+    const api: StackNavApi = {
+      goTo: (index, opts) => {
+        centerOn(clampIndex(index), opts);
+      },
+      goToAndStage: (index, gapAbs = 1) => {
+        const i = clampIndex(index);
+        pendingStageIndexRef.current = i;
+        pendingStageGapRef.current = Math.max(0, gapAbs);
+        centerOn(i); // smooth scroll; stage when centered
+      },
+      goToRangeAndStage: (start, end, gapAbs = 1) => {
+        // clear any single/range staging visuals
+        clearStage();
+
+        // turn ON group-gaps mode and set the gap size
+        if (groupGapsActiveRef) groupGapsActiveRef.current = true;
+        stageGapRef.current = Math.max(0, gapAbs);
+
+        // figure out the target group from [start..end]
+        const s = Math.max(0, Math.min((planes ?? 1) - 1, Math.min(start, end)));
+        const e = Math.max(0, Math.min((planes ?? 1) - 1, Math.max(start, end)));
+
+        // set focused group so its offset is 0
+        if (focusGroupRef && groupRanges) {
+          // exact match first; otherwise, find the group that contains s
+          let gid = groupRanges.findIndex(([gs, ge]) => gs === s && ge === e);
+          if (gid < 0) gid = Math.max(0, groupRanges.findIndex(([gs, ge]) => s >= gs && s <= ge));
+          focusGroupRef.current = gid >= 0 ? gid : 0;
+        }
+
+        // scroll to the FIRST panel in the group
+        centerOn(s);
+      },
+      clearStage,
+    };
+
+    navApiExternalRef.current = api;
+    return () => { navApiExternalRef.current = null; };
+  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges]);
+
   useFrame(() => {
     const raw = scroll.offset;
     let p = THREE.MathUtils.clamp((raw - start) / Math.max(1e-6, end - start), 0, 1);
@@ -612,6 +922,58 @@ function LocalZScroller({
     // center index will be computed from zSmoothed below for stability
 
     zSmoothed.current += (zTarget - zSmoothed.current) * ease;
+
+    if (
+      pendingStageIndexRef.current !== null &&
+      centerIndexRef.current === pendingStageIndexRef.current
+    ) {
+      stageAt(centerIndexRef.current, pendingStageGapRef.current);
+      pendingStageIndexRef.current = null; // clear
+    }
+
+    // follow-single (you already have this)
+    if (stagedIndexRef.current !== null && stageGapRef.current > 0) {
+      if (stagedIndexRef.current !== centerIndexRef.current) {
+        stagedIndexRef.current = centerIndexRef.current;
+      }
+    }
+
+    // NEW: follow-range with fixed span around the center
+    if (
+      stagedRangeStartRef.current !== null &&
+      stagedRangeEndRef.current !== null &&
+      stageGapRef.current > 0
+    ) {
+      const span = stagedRangeSpanRef.current; // e - s
+      const center = centerIndexRef.current;
+      const maxIdx = (planes ?? 1) - 1;
+      const maxStart = Math.max(0, maxIdx - span);
+
+      // keep same span, center it on "center"
+      let start = Math.floor(center - span / 2);
+      start = Math.max(0, Math.min(maxStart, start));
+      const end = start + span;
+
+      stagedRangeStartRef.current = start;
+      stagedRangeEndRef.current = end;
+    }
+
+    // stage the range once we arrive at its center
+    if (pendingStageRangeRef.current) {
+      const { start, end, gapAbs } = pendingStageRangeRef.current;
+      const targetCenter = Math.round((start + end) / 2);
+      if (centerIndexRef.current === targetCenter) {
+        stageRangeAt(start, end, gapAbs);
+        pendingStageRangeRef.current = null;
+      }
+    } else if (
+      pendingStageIndexRef.current !== null &&
+      centerIndexRef.current === pendingStageIndexRef.current
+    ) {
+      stageAt(centerIndexRef.current, pendingStageGapRef.current);
+      pendingStageIndexRef.current = null;
+    }
+
 
     // Compute stable center index from the SMOOTHED z to avoid jitter
     if (navLockRef.current > 0) {
@@ -656,12 +1018,20 @@ function LocalZScroller({
       stageGapRef,
       stageAt,
       clearStage,
+      stagedRangeStartRef,
+      stagedRangeEndRef,
+      stageRangeAt,
       expandedIndex,
       expandedIndexRef,
       setExpandedIndex,
       lastExpandedIndexRef,
       expandedSwitchLockRef,
       navLockRef,
+      groupIndexMapRef,
+      groupsCountRef,
+      groupGapsActiveRef,
+      focusGroupRef,
+      groupNamesRef,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [gap, centerOn, stageAt, clearStage, expandedIndex]
@@ -683,7 +1053,11 @@ function KeyboardNavigator({ planes }: { planes: number }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      const isTyping = !!target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || (target as any).isContentEditable);
+      const isTyping =
+        !!target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          (target as any).isContentEditable);
       if (isTyping || e.altKey || e.ctrlKey || e.metaKey) return;
 
       let step = 0;
@@ -692,7 +1066,7 @@ function KeyboardNavigator({ planes }: { planes: number }) {
       else return;
 
       const isExpanded = (ctx?.expandedIndexRef?.current ?? null) !== null;
-      if (!isExpanded) return;
+      if (!isExpanded) return; // only handle arrows when expanded
       e.preventDefault();
 
       const current = ctx?.centerIndexRef?.current ?? 0;
@@ -705,8 +1079,28 @@ function KeyboardNavigator({ planes }: { planes: number }) {
       }
       if (ctx?.navLockRef) ctx.navLockRef.current = 2;
 
+      const groupGapsOn = !!ctx?.groupGapsActiveRef?.current;
+
+      // When expanded AND group gaps are ON:
+      //   → just recenter/expand switch without invoking single staging.
       if ((ctx?.expandedIndexRef?.current ?? null) !== null) {
-        const gapAbs = (ctx?.stageGapRef?.current ?? 0) > 0 ? (ctx?.stageGapRef!.current as number) : 1;
+        if (groupGapsOn) {
+          ctx?.centerOn?.(next); // smooth scroll keeps working
+          if (ctx?.lastExpandedIndexRef)
+            ctx.lastExpandedIndexRef.current =
+              ctx?.expandedIndexRef?.current ?? null;
+          if (ctx?.expandedSwitchLockRef)
+            ctx.expandedSwitchLockRef.current = 4; // snap switch a few frames
+          ctx?.setExpandedIndex?.(next);
+          return;
+        }
+
+        // Group gaps OFF → preserve legacy "expanded + single-stage" behavior
+        const gapAbs =
+          (ctx?.stageGapRef?.current ?? 0) > 0
+            ? (ctx?.stageGapRef!.current as number)
+            : 1;
+
         if (ctx?.stagedIndexRef) ctx.stagedIndexRef.current = next;
         if (ctx?.centerIndexRef) {
           (ctx.centerIndexRef as any).prev = next;
@@ -714,20 +1108,13 @@ function KeyboardNavigator({ planes }: { planes: number }) {
         }
         ctx?.stageAt?.(next, gapAbs);
         ctx?.centerOn?.(next);
-        if (ctx?.lastExpandedIndexRef) ctx.lastExpandedIndexRef.current = ctx?.expandedIndexRef?.current ?? null;
-        if (ctx?.expandedSwitchLockRef) ctx.expandedSwitchLockRef.current = 4; // snap switch for a couple frames
+        if (ctx?.lastExpandedIndexRef)
+          ctx.lastExpandedIndexRef.current =
+            ctx?.expandedIndexRef?.current ?? null;
+        if (ctx?.expandedSwitchLockRef)
+          ctx.expandedSwitchLockRef.current = 4;
         ctx?.setExpandedIndex?.(next);
         return;
-      }
-
-      const hasStage = ((ctx?.stageGapRef?.current ?? 0) > 0) || ((ctx?.stagedIndexRef?.current ?? null) !== null);
-      if (hasStage) {
-        const gapAbs = (ctx?.stageGapRef?.current ?? 0) > 0 ? (ctx?.stageGapRef!.current as number) : 1;
-        if (ctx?.stagedIndexRef) ctx.stagedIndexRef.current = next;
-        ctx?.stageAt?.(next, gapAbs); // keep stage and pass the gap to the new center
-        ctx?.centerOn?.(next);
-      } else {
-        ctx?.centerOn?.(next);
       }
     };
 
