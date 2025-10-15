@@ -1,0 +1,162 @@
+@import url('https://fonts.googleapis.com/css2?family=Epilogue:ital,wght@0,100..900;1,100..900&display=swap');
+
+span, a, div, h1, h2, h3 {
+  font-family: "Epilogue", sans-serif;
+
+}
+
+/* Container: names list (bottom-right) */
+.axon-names {
+  position: absolute;
+  bottom: 22px;
+  right: 22px;
+  z-index: 10;
+
+  opacity: 1;
+  pointer-events: auto;
+
+  user-select: none;
+  font-family: system-ui, sans-serif;
+
+  background: rgba(255, 255, 255, 0.85);
+  padding: 12px;
+  border-radius: 10px;
+
+  max-height: 40vh;
+  width: 280px;
+
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+
+  transition: opacity 150ms ease;
+}
+
+.axon-names.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.axon-names__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: right;
+}
+
+.axon-names__btn {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: right;
+  padding: 0;
+  font-size: 20px;
+  text-transform: capitalize;
+}
+
+/* Top-left: city/date block */
+.axon-meta {
+  position: absolute;
+  top: 40px;
+  left: 40px;
+
+  color: #000;
+  pointer-events: none;
+
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  font-size: 30px;
+}
+
+.axon-meta__date {
+  display: inline-block;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  color: #888;
+}
+
+/* Top-center: title */
+.axon-title {
+  position: absolute;
+  top: 40px;
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+
+  color: #000;
+  pointer-events: none;
+
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  font-size: 30px;
+}
+
+/* Bottom-center: logo */
+.axon-logo {
+  position: absolute;
+  bottom: 40px;
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+
+  color: #000;
+  pointer-events: none;
+
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  font-size: 30px;
+}
+
+.axon-logo img {
+  width: 18vh;
+}
+
+/* Expanded overlay (bottom-right) */
+.axon-expanded {
+  position: absolute;
+  bottom: 150px;
+  right: 80px;
+
+  min-height: 20vh;
+  min-width: 30vh;
+
+  padding: 8px 10px;
+  border-radius: 8px;
+
+  background: rgba(255, 255, 255, 0.9);
+  color: #000;
+
+  pointer-events: auto;
+  user-select: text;
+}
+
+.axon-expanded__arrows {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.axon-expanded__arrowBtn {
+  font-size: 24px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.axon-expanded__name {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin: 6px 0 2px 0;
+}
+
+.axon-expanded__ig {
+  font-size: 14px;
+}
+
+.axon-expanded__ig a {
+  opacity: 0.8;
+  text-decoration: none;
+  margin-left: 2px; /* ensures space after "instagram:" */
+}

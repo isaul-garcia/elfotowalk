@@ -1,10 +1,3 @@
-// ClickableAxonStackDebug (cleaned)
-// - Organized imports
-// - Removed unused imports and redundancies
-// - Centralized constants and helpers
-// - Wrapped debug logs with DEBUG guard
-// - Kept ALL behavior/animations/controls intact
-
 import React, { useMemo, useRef, useState, useContext, useEffect, useCallback } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
@@ -12,11 +5,12 @@ import {
   useCursor,
   ScrollControls,
   useScroll,
-  Stats,
   useTexture,
-  Html
 } from "@react-three/drei";
 import * as THREE from "three";
+import "./AxonStack.css"
+import logo from "../../assets/endmarks_logo.png";
+import shortLogo from "../../assets/endmarks_short_logo.png";
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Config / Debug
@@ -95,11 +89,11 @@ export default function ClickableAxonStackDebug() {
   const navApiRef = useRef<StackNavApi | null>(null);
 
   const IMAGES = useMemo<string[]>(
-    () => Array.from({ length: 52 }, (_, i) => `/stack-images/${String(i).padStart(3, "0")}.jpg`),
+    () => Array.from({ length: 82 }, (_, i) => `/stack-images/${String(i).padStart(3, "0")}.jpg`),
     []
   );
 
-  const GAP = 0.2;
+  const GAP = 0.18;
   const planeCount = IMAGES.length;
 
   const depth = (planeCount - 1) * GAP;
@@ -111,14 +105,58 @@ export default function ClickableAxonStackDebug() {
     console.log("Images list (first 5):", IMAGES.slice(0, 5), "total:", IMAGES.length);
   }, [IMAGES]);
 
-  const ANCHORS = useMemo(() => {
+  const ANCHORS = useMemo<Photographer[]>(() => {
     const safe = (i: number) => Math.max(0, Math.min(planeCount - 1, i));
     return [
-      { name: "Isa", indices: [safe(0), safe(11)] },
-      { name: "Tom", indices: [safe(12), safe(22)] },
-      { name: "Pepo", indices: [safe(23), safe(30)] },
-      { name: "Dia", indices: [safe(31), safe(46)] },
-      { name: "Ule", indices: [safe(47), safe(51)] },
+      { name: "Adrianna Figueroa", instagram: "adrianafigue", indices: [safe(0), safe(3)] },
+      { name: "Adriel Ildefonso", indices: [safe(4), safe(7)] },
+      { name: "Alex Lopez", indices: [safe(8), safe(17)] },
+      { name: "Alondra Ramos", indices: [safe(18), safe(29)] },
+      { name: "Ambar Yezabeth Cosme Pabon", indices: [safe(30), safe(31)] },
+      { name: "Andrea Pérez Molina", indices: [safe(32), safe(40)] },
+      { name: "Ariana González Palaez", indices: [safe(41), safe(47)] },
+      { name: "Aurelio Rodríguez", indices: [safe(48), safe(58)] },
+      { name: "Carlos-René Ramírez", indices: [safe(59), safe(61)] },
+      { name: "Carolina Robles", indices: [safe(62), safe(69)] },
+      { name: "Christian Soto", indices: [safe(70), safe(76)] },
+      { name: "David Rodríguez", indices: [safe(77), safe(81)] },
+      { name: "Erika Pérez", indices: [safe(82), safe(90)] },
+
+      // { name: "Gabriel Saga Saldaña", indices: [safe(48), safe(58)] },
+      // { name: "Gabriel Morales", indices: [safe(48), safe(58)] },
+      // { name: "gabriel soria flecha", indices: [safe(48), safe(58)] },
+      // { name: "giancarlos merced", indices: [safe(48), safe(58)] },
+      // { name: "giuliana conty", indices: [safe(48), safe(58)] },
+      // { name: "irene montes", indices: [safe(48), safe(58)] },
+      // { name: "ivan valdes", indices: [safe(48), safe(58)] },
+      // { name: "jaime castillo", indices: [safe(48), safe(58)] },
+      // { name: "jason josel riopedre cuevas", indices: [safe(48), safe(58)] },
+      // { name: "javier pagán", indices: [safe(48), safe(58)] },
+      //
+      // { name: "jean martínez", indices: [safe(48), safe(58)] },
+      // { name: "john velez", indices: [safe(48), safe(58)] },
+      // { name: "jorge echevarría", indices: [safe(48), safe(58)] },
+      // { name: "josé gonzález", indices: [safe(48), safe(58)] },
+      // { name: "juan diego lastra", indices: [safe(48), safe(58)] },
+      // { name: "kevin padilla", indices: [safe(48), safe(58)] },
+      // { name: "leida nazario", indices: [safe(48), safe(58)] },
+      // { name: "malia ramos", indices: [safe(48), safe(58)] },
+      // { name: "maricely galvan", indices: [safe(48), safe(58)] },
+      // { name: "moises sierra", indices: [safe(48), safe(58)] },
+      // { name: "nahiara alicea", indices: [safe(48), safe(58)] },
+      // { name: "natasha colón", indices: [safe(48), safe(58)] },
+      // { name: "rafael lopez", indices: [safe(48), safe(58)] },
+      // { name: "rafael ruiz", indices: [safe(48), safe(58)] },
+      // { name: "reynaldo rodriguez", indices: [safe(48), safe(58)] },
+      // { name: "richaliz diaz", indices: [safe(48), safe(58)] },
+      // { name: "robert torres", indices: [safe(48), safe(58)] },
+      // { name: "rodolfo barrios", indices: [safe(48), safe(58)] },
+      // { name: "rolando haddock", indices: [safe(48), safe(58)] },
+      // { name: "samantha ortiz", indices: [safe(48), safe(58)] },
+      // { name: "sergio lopez", indices: [safe(48), safe(58)] },
+      // { name: "sigfredo alexae vazquez", indices: [safe(48), safe(58)] },
+      // { name: "yetzel gonzález", indices: [safe(48), safe(58)] },
+      // { name: "zabdiel abreu sánchez", indices: [safe(48), safe(58)] },
     ];
   }, [planeCount]);
 
@@ -131,14 +169,12 @@ export default function ClickableAxonStackDebug() {
 
   const GROUP_NAMES = useMemo<string[]>(() => ANCHORS.map(a => a.name), [ANCHORS]);
 
-  const expandedName = useMemo(() => {
+  type Photographer = { name: string; instagram?: string; indices: [number, number] };
+  const expandedName = useMemo<Photographer | null>(() => {
     if (expandedIdx == null) return null;
-    // find which group range contains the expanded index
     for (let gi = 0; gi < GROUP_RANGES.length; gi++) {
       const [s, e] = GROUP_RANGES[gi];
-      if (expandedIdx >= s && expandedIdx <= e) {
-        return ANCHORS[gi].name;
-      }
+      if (expandedIdx >= s && expandedIdx <= e) return ANCHORS[gi];
     }
     return null;
   }, [expandedIdx, GROUP_RANGES, ANCHORS]);
@@ -161,7 +197,7 @@ export default function ClickableAxonStackDebug() {
           position={[0, CAM_Y, 0]}
           near={0.001}
           far={5000}
-          zoom={180}
+          zoom={160}
           onUpdate={(c) => {
             c.lookAt(0, 0, 0);
             c.updateProjectionMatrix();
@@ -207,60 +243,93 @@ export default function ClickableAxonStackDebug() {
 
         {/* {DEBUG && <Stats showPanel={0} className="r3f-stats" />} */}
       </Canvas>
+
+      {/* NAMES LIST */}
       <div
         aria-hidden={expandedIdx !== null}
-        style={{
-          opacity: expandedIdx !== null ? 0 : 1,
-          pointerEvents: expandedIdx !== null ? "none" : "auto",
-          transition: "opacity 150ms ease",
-          position: "absolute",
-          bottom: 22,
-          right: 22,
-          display: "flex",
-          flexDirection: "column",
-          textAlign: "right",
-          gap: 8,
-          zIndex: 10,
-          userSelect: "none",
-          fontFamily: "system-ui, sans-serif",
-          background: "rgba(255,255,255,0.85)",
-          padding: "14px 16px",
-        }}
+        className={`axon-names ${expandedIdx !== null ? "is-hidden" : ""}`}
       >
-        {ANCHORS.map((a) => {
-          const [start, end] = a.indices;
-          return (
-            <button
-              key={a.name}
-              onClick={() => navApiRef.current?.goToRangeAndStage(start, end, 1)}
-              style={{ cursor: "pointer", border: "none", textAlign: "right", padding: 0, backgroundColor: "#00000000", fontSize: "20px" }}
-              title={`${a.name} (${start}–${end})`}
-            >
-              {a.name}
-            </button>
-          );
-        })}
+        <div className="axon-names__list">
+          {ANCHORS.map((a) => {
+            const [start, end] = a.indices;
+            return (
+              <button
+                key={a.name}
+                className="axon-names__btn"
+                onClick={() =>
+                  navApiRef.current?.goToRangeAndStage(start, end, STAGE_GAP_WHEN_STAGED)
+                }
+                title={`${a.name} (${start}–${end})`}
+              >
+                {a.name}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
+      {/* CITY + DATE (top-left) */}
+      <div className="axon-meta">
+        Ponce, PR
+        <br />
+        <span className="axon-meta__date">21 de Junio de 2025</span>
+      </div>
+
+      {/* TITLE (top-center) */}
+      <div className="axon-title">
+        {/* <img src={shortLogo} alt="Logo" /> */}
+        El Fotowalk
+      </div>
+
+      {/* LOGO (bottom-center) */}
+      <div className="axon-logo">
+        <img src={logo} alt="Logo" />
+      </div>
+
+      {/* EXPANDED OVERLAY */}
       {expandedName && (
-        <div
-          style={{
-            padding: "4px 8px",
-            marginBottom: 6,
-            borderRadius: 8,
-            fontSize: 20,
-            fontWeight: 600,
-            letterSpacing: "0.3px",
-            color: "#000",
-            pointerEvents: "none",
-            position: "absolute",
-            top: 150,
-            left: 50
-          }}
-        >
-          {expandedName}
+        <div className="axon-expanded">
+          <div className="axon-expanded__arrows">
+            <button
+              className="axon-expanded__arrowBtn"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+              }}
+              aria-label="Previous"
+            >
+              ←
+            </button>
+            <button
+              className="axon-expanded__arrowBtn"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+              }}
+              aria-label="Next"
+            >
+              →
+            </button>
+          </div>
+
+          <div className="axon-expanded__name">{expandedName.name}</div>
+
+          {expandedName.instagram && (
+            <span className="axon-expanded__ig">
+              instagram:{" "}
+              <a
+                href={`https://instagram.com/${expandedName.instagram}`}
+                target="_blank"
+                rel="noreferrer"
+                title={`Open @${expandedName.instagram} on Instagram`}
+              >
+                @{expandedName.instagram}
+              </a>
+            </span>
+          )}
         </div>
       )}
+
     </div>
   );
 }
@@ -313,15 +382,18 @@ const CARD_FRONT_SHIFT = 0;
 const CARD_PULL = 2.0;
 const CARD_ROTATE_SPD = 0.2;
 const CARD_MOVE_SPD = 0.18;
-const CARD_SCALE_EXPANDED = 4.6;
 const CARD_SCALE_SPD = 0.18;
+const CARD_RETURN_SPD = 0.18;
+const CARD_SCALE_EXPANDED = 4.25;
 const CARD_OFF_SCREEN_X = 1.0;
 const CARD_OFF_SCREEN_Y = -0.6;
 const CARD_CENTER_NUDGE_X = -1.0;
 const CARD_CENTER_NUDGE_Y = 0.6;
-const CARD_RETURN_SPD = 0.18;
-const CARD_STAGE_GAP_ABS = 1;
+const CARD_STAGE_GAP_ABS = 2;
 const EXPANDED_RENDER_ORDER = 1_000_000;
+const STAGE_GAP_WHEN_STAGED = 2;
+const STAGE_GAP_WHEN_EXPANDED = 10;
+const BACKDROP_FADE_SPD = 0.18;
 
 function Card({
   src,
@@ -349,6 +421,8 @@ function Card({
   const imgSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const fitTRef = useRef(0); // 0 = cover, 1 = contain
   const FIT_SPD = 0.18;
+  const backdropRef = useRef<THREE.Mesh>(null!);
+  const backdropMatRef = useRef<THREE.MeshBasicMaterial>(null!);
 
   const [hovered, setHovered] = useState(false);
   const expanded = (ctx?.expandedIndexRef?.current ?? null) === index;
@@ -502,10 +576,10 @@ function Card({
         ref.current.scale.lerp(anisotropicTarget, CARD_SCALE_SPD);
       }
 
-      if (meshRef.current) meshRef.current.renderOrder = EXPANDED_RENDER_ORDER;
-      ref.current.renderOrder = EXPANDED_RENDER_ORDER;
+      if (meshRef.current) meshRef.current.renderOrder = EXPANDED_RENDER_ORDER + 1;
+      ref.current.renderOrder = EXPANDED_RENDER_ORDER + 1;
       if (matRef.current) {
-        matRef.current.transparent = false;
+        matRef.current.transparent = true;
         matRef.current.depthTest = false;
         matRef.current.depthWrite = false;
         matRef.current.depthFunc = THREE.AlwaysDepth;
@@ -514,8 +588,40 @@ function Card({
         matRef.current.polygonOffsetUnits = -4;
         matRef.current.opacity = 1;
       }
+
+      if (backdropRef.current && backdropMatRef.current && ref.current) {
+        // match transform
+        backdropRef.current.quaternion.copy(ref.current.quaternion);
+        backdropRef.current.position.copy(ref.current.position);
+        backdropRef.current.scale.set(200, 200, 1);
+        backdropRef.current.renderOrder = EXPANDED_RENDER_ORDER - 1;
+
+        // fade in
+        const mat = backdropMatRef.current;
+        backdropRef.current.visible = true; // ensure it can draw while fading
+        const target = 1;                   // fully on when expanded
+        mat.opacity += (target - mat.opacity) * BACKDROP_FADE_SPD;
+        if (Math.abs(target - mat.opacity) < 1e-3) mat.opacity = target;
+      }
+
       return;
     }
+
+    // fade out when not expanded
+    if (backdropRef.current && backdropMatRef.current) {
+      const mat = backdropMatRef.current;
+      const target = 0;
+      mat.opacity += (target - mat.opacity) * BACKDROP_FADE_SPD;
+      if (Math.abs(mat.opacity - target) < 1e-3) {
+        mat.opacity = 0;
+        backdropRef.current.visible = false; // hide once fully transparent
+      } else {
+        backdropRef.current.visible = true; // keep drawing during fade
+      }
+    }
+
+    // --- collapsed/staged path ---
+    if (backdropRef.current) backdropRef.current.visible = false;
 
     // Collapsed / staged behavior
     ref.current.position.x += (0 - ref.current.position.x) * CARD_RETURN_SPD;
@@ -617,7 +723,7 @@ function Card({
       return;
     }
     if (!isStagedHere) {
-      ctx?.stageAt?.(index, 1);
+      ctx?.stageAt?.(index, 2);
       return;
     }
     ctx?.setExpandedIndex?.(index);
@@ -625,6 +731,21 @@ function Card({
 
   return (
     <group ref={ref} position={[0, 0, baseZ]} renderOrder={renderOrder}>
+
+      <mesh ref={backdropRef} visible={false}>
+        <planeGeometry args={[1, 1]} />
+        <meshBasicMaterial
+          ref={backdropMatRef}
+          color="white"
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+
       <mesh
         ref={meshRef}
         rotation={[0, 0, Math.PI]}
@@ -653,6 +774,43 @@ function Card({
       </mesh>
     </group>
   );
+}
+
+// Compute cover cropping for a fixed plane (no squish)
+function computeCoverParams(
+  iw: number,
+  ih: number,
+  planeW: number,
+  planeH: number
+) {
+  const planeAR = planeW / planeH;
+  const imgAR = iw / ih;
+
+  if (imgAR > planeAR) {
+    // Image wider → crop left/right
+    const sx = planeAR / imgAR; // 0..1 of width to show
+    return { repeatX: sx, repeatY: 1, offsetX: (1 - sx) * 0.5, offsetY: 0 };
+  } else {
+    // Image taller → crop top/bottom
+    const sy = imgAR / planeAR; // 0..1 of height to show
+    return { repeatX: 1, repeatY: sy, offsetX: 0, offsetY: (1 - sy) * 0.5 };
+  }
+}
+
+// Given full-texture mapping (repeat=1,1), scale the plane so the image is not distorted (contain)
+function containScaleFactors(
+  iw: number,
+  ih: number,
+  planeW: number,
+  planeH: number
+) {
+  const planeAR = planeW / planeH;
+  const imgAR = iw / ih;
+  // We'll keep Y factor at 1 and scale X to match the image aspect
+  // so (W * fx) / (H * 1) = imgAR  => fx = imgAR / planeAR
+  const fx = imgAR / planeAR;
+  const fy = 1;
+  return { fx, fy };
 }
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -713,15 +871,22 @@ function LocalZScroller({
   const expandedSwitchLockRef = useRef<number>(0);
   const navLockRef = useRef<number>(0);
 
-  const pendingStageIndexRef = useRef<number | null>(null);   // NEW
-  const pendingStageGapRef = useRef<number>(1);
+  const pendingStageIndexRef = useRef<number | null>(null);
+  const pendingStageGapRef = useRef<number>(2);
 
   const stagedRangeStartRef = useRef<number | null>(null);
   const stagedRangeEndRef = useRef<number | null>(null);
   const stagedRangeSpanRef = useRef<number>(0);
+  const prevStageGapRef = useRef<number>(0);
+
+  const prevGroupGapsActiveRef = useRef<boolean>(false);
+  const prevStagedIndexRef = useRef<number | null>(null);
+  const prevRangeStartRef = useRef<number | null>(null);
+  const prevRangeEndRef = useRef<number | null>(null);
 
   // pending “stage-after-arrive” for ranges
   const pendingStageRangeRef = useRef<{ start: number; end: number; gapAbs: number } | null>(null);
+  const pendingGroupGapRef = useRef<{ s: number; e: number; gapAbs: number; gid: number } | null>(null);
 
   const groupIndexMap = useMemo(() => {
     if (!groupRanges || !planes) return null;
@@ -800,9 +965,77 @@ function LocalZScroller({
   const [expandedIndex, setExpandedIndexState] = useState<number | null>(null);
   const expandedIndexRef = useRef<number | null>(null);
   const setExpandedIndex = useCallback((idx: number | null) => {
+    const wasExpanded = expandedIndexRef.current != null; // read BEFORE we change it
+
     expandedIndexRef.current = idx;
     setExpandedIndexState(idx);
     onExpandedChange?.(idx);
+
+    if (idx != null) {
+      // ENTERING expanded
+      if (!wasExpanded) {
+        // Snapshot ONCE (rising edge)
+        prevStageGapRef.current = stageGapRef.current;
+        prevGroupGapsActiveRef.current = !!groupGapsActiveRef.current;
+        prevStagedIndexRef.current = stagedIndexRef.current;
+        prevRangeStartRef.current = stagedRangeStartRef.current;
+        prevRangeEndRef.current = stagedRangeEndRef.current;
+
+        // Use the large gap only while expanded
+        stageGapRef.current = STAGE_GAP_WHEN_EXPANDED;
+      }
+      // If we were already expanded (switching images), DO NOT touch gap or snapshots.
+
+    } else {
+      // LEAVING expanded
+      if (wasExpanded) {
+        // Restore ONCE (falling edge)
+        const hadGroupGapsBefore = !!prevGroupGapsActiveRef.current;
+        const hadSingleBefore = prevStagedIndexRef.current !== null;
+        const hadRangeBefore = prevRangeStartRef.current !== null && prevRangeEndRef.current !== null;
+
+        if (hadGroupGapsBefore) {
+          // restore group gaps + original gap
+          groupGapsActiveRef.current = true;
+          stageGapRef.current = prevStageGapRef.current;
+
+          // clear any temp single/range staging created while expanded
+          stagedIndexRef.current = null;
+          stagedRangeStartRef.current = null;
+          stagedRangeEndRef.current = null;
+          stagedRangeSpanRef.current = 0;
+
+        } else if (hadSingleBefore || hadRangeBefore) {
+          // restore whichever staging existed before
+          groupGapsActiveRef.current = false;
+          stageGapRef.current = prevStageGapRef.current;
+
+          stagedIndexRef.current = hadSingleBefore ? prevStagedIndexRef.current : null;
+          if (hadRangeBefore) {
+            stagedRangeStartRef.current = prevRangeStartRef.current;
+            stagedRangeEndRef.current = prevRangeEndRef.current;
+            stagedRangeSpanRef.current = prevRangeEndRef.current! - prevRangeStartRef.current!;
+          } else {
+            stagedRangeStartRef.current = null;
+            stagedRangeEndRef.current = null;
+            stagedRangeSpanRef.current = 0;
+          }
+
+        } else {
+          // there was NO staging before expanding → clear any temp staging
+          groupGapsActiveRef.current = false;
+          stagedIndexRef.current = null;
+          stagedRangeStartRef.current = null;
+          stagedRangeEndRef.current = null;
+          stagedRangeSpanRef.current = 0;
+          stageGapRef.current = 0;
+        }
+
+        // defensive: clear any pending stage actions
+        pendingStageIndexRef.current = null;
+        pendingStageRangeRef.current = null;
+      }
+    }
   }, [onExpandedChange]);
 
   const collapseExpanded = useCallback(() => {
@@ -875,33 +1108,35 @@ function LocalZScroller({
       goTo: (index, opts) => {
         centerOn(clampIndex(index), opts);
       },
-      goToAndStage: (index, gapAbs = 1) => {
+      goToAndStage: (index, gapAbs = 2) => {
         const i = clampIndex(index);
         pendingStageIndexRef.current = i;
         pendingStageGapRef.current = Math.max(0, gapAbs);
         centerOn(i); // smooth scroll; stage when centered
       },
-      goToRangeAndStage: (start, end, gapAbs = 1) => {
-        // clear any single/range staging visuals
+      goToRangeAndStage: (start, end, gapAbs = 2) => {
+        // 1) Clear any single/range staging visuals
         clearStage();
 
-        // turn ON group-gaps mode and set the gap size
-        if (groupGapsActiveRef) groupGapsActiveRef.current = true;
-        stageGapRef.current = Math.max(0, gapAbs);
+        // 2) COLLAPSE group gaps immediately
+        groupGapsActiveRef.current = false;
+        stageGapRef.current = 0;
 
-        // figure out the target group from [start..end]
+        // 3) Compute clamped start/end and target group id
         const s = Math.max(0, Math.min((planes ?? 1) - 1, Math.min(start, end)));
         const e = Math.max(0, Math.min((planes ?? 1) - 1, Math.max(start, end)));
 
-        // set focused group so its offset is 0
-        if (focusGroupRef && groupRanges) {
-          // exact match first; otherwise, find the group that contains s
-          let gid = groupRanges.findIndex(([gs, ge]) => gs === s && ge === e);
+        let gid = 0;
+        if (groupRanges) {
+          // exact match first; otherwise, group containing s
+          gid = groupRanges.findIndex(([gs, ge]) => gs === s && ge === e);
           if (gid < 0) gid = Math.max(0, groupRanges.findIndex(([gs, ge]) => s >= gs && s <= ge));
-          focusGroupRef.current = gid >= 0 ? gid : 0;
         }
 
-        // scroll to the FIRST panel in the group
+        // 4) Defer opening group gaps until we ARRIVE at s
+        pendingGroupGapRef.current = { s, e, gapAbs: Math.max(0, gapAbs), gid };
+
+        // 5) Scroll to the FIRST panel in the target group
         centerOn(s);
       },
       clearStage,
@@ -929,13 +1164,6 @@ function LocalZScroller({
     ) {
       stageAt(centerIndexRef.current, pendingStageGapRef.current);
       pendingStageIndexRef.current = null; // clear
-    }
-
-    // follow-single (you already have this)
-    if (stagedIndexRef.current !== null && stageGapRef.current > 0) {
-      if (stagedIndexRef.current !== centerIndexRef.current) {
-        stagedIndexRef.current = centerIndexRef.current;
-      }
     }
 
     // NEW: follow-range with fixed span around the center
@@ -992,6 +1220,19 @@ function LocalZScroller({
         }
         centerIndexRef.current = idxStable;
         (centerIndexRef as any).prev = idxStable;
+      }
+    }
+
+    ref.current.position.set(0, 0, zSmoothed.current);
+    if (pendingGroupGapRef.current) {
+      const { s, gapAbs, gid } = pendingGroupGapRef.current;
+      if (centerIndexRef.current === s) {
+        groupGapsActiveRef.current = true;
+        stageGapRef.current = gapAbs;
+        if (typeof gid === "number") {
+          focusGroupRef.current = gid;
+        }
+        pendingGroupGapRef.current = null;
       }
     }
 
@@ -1096,17 +1337,10 @@ function KeyboardNavigator({ planes }: { planes: number }) {
         }
 
         // Group gaps OFF → preserve legacy "expanded + single-stage" behavior
-        const gapAbs =
-          (ctx?.stageGapRef?.current ?? 0) > 0
-            ? (ctx?.stageGapRef!.current as number)
-            : 1;
-
-        if (ctx?.stagedIndexRef) ctx.stagedIndexRef.current = next;
         if (ctx?.centerIndexRef) {
           (ctx.centerIndexRef as any).prev = next;
           ctx.centerIndexRef.current = next;
         }
-        ctx?.stageAt?.(next, gapAbs);
         ctx?.centerOn?.(next);
         if (ctx?.lastExpandedIndexRef)
           ctx.lastExpandedIndexRef.current =
@@ -1123,41 +1357,4 @@ function KeyboardNavigator({ planes }: { planes: number }) {
   }, [ctx, planes]);
 
   return null;
-}
-
-// Compute cover cropping for a fixed plane (no squish)
-function computeCoverParams(
-  iw: number,
-  ih: number,
-  planeW: number,
-  planeH: number
-) {
-  const planeAR = planeW / planeH;
-  const imgAR = iw / ih;
-
-  if (imgAR > planeAR) {
-    // Image wider → crop left/right
-    const sx = planeAR / imgAR; // 0..1 of width to show
-    return { repeatX: sx, repeatY: 1, offsetX: (1 - sx) * 0.5, offsetY: 0 };
-  } else {
-    // Image taller → crop top/bottom
-    const sy = imgAR / planeAR; // 0..1 of height to show
-    return { repeatX: 1, repeatY: sy, offsetX: 0, offsetY: (1 - sy) * 0.5 };
-  }
-}
-
-// Given full-texture mapping (repeat=1,1), scale the plane so the image is not distorted (contain)
-function containScaleFactors(
-  iw: number,
-  ih: number,
-  planeW: number,
-  planeH: number
-) {
-  const planeAR = planeW / planeH;
-  const imgAR = iw / ih;
-  // We'll keep Y factor at 1 and scale X to match the image aspect
-  // so (W * fx) / (H * 1) = imgAR  => fx = imgAR / planeAR
-  const fx = imgAR / planeAR;
-  const fy = 1;
-  return { fx, fy };
 }
