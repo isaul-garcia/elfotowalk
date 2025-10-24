@@ -1,39 +1,44 @@
 BUGS:
-> imagenes estan mirrored actualmente
-> if you hit the next/prev keys too fast they stay in the same image |4
-> if you hit the next/prev keys too fast you see a glimpse of the stack in the back |4
-> there a small wobble effect on the expanded image when pressing next/prev keys |5
+> if you hit the next/prev keys too fast they stay in the same image
+> if you hit the next/prev keys too fast you see a glimpse of the stack in the back
 > if you click second name, and scroll up, the end wont be in the middle
-> \\jitter movement when a name is clicked |4
-> \\when expanded, stack shouldnt be clickable |.
+> current scroll is stalling or something, getting stuck along the way
+
+
+X__add dot scrollbar to names, maybe use as drag?
+
+change to smaller image when in stack and bigger image when expanded
+swap images to actual images...
+
+add initial loading screen with progression bar
+* make intro of the unpacking
+
+"e" icon para el favicon
+
+flip scroll direction on mobile
+
+make tick ignore expand as well
+* add tick and names in the 3d itself
+
+
+
+
+* add instagram icons i more info icon
+
+* zoom in/zoom out the stack buttons? (zoomed out view with fewer ticks)
+
+get links de instagram
+
+
+
+
 
 /////
 
-\\ on staging, make the separation wider |1
-\\ when expanded, background should look white |1
-\\ further away when stack is at initial state |1
-\\ animacion: clicking otro nombre, should collapse them all > move to center of stack > (i guess dont lift the image or still lift the center image... thats going to mess things up) |3
+fix that group thing where when it expands center goes off the frame
 
+make loading screen or intro screen
 
-swap images to actual images |2
+add buttons for their socials and event info
 
-how are names going to look, since they are too many |2
-
-add interface |2
-- for inital stack view (ponce pr y  fecha - arriba izquierda, el fotowalk 3 - medio arriba, endmarks tres criculos - arriba derecha, names - abajo derecha, info button e instagram button - ultimo abajo derecha)
-- for gapped (=)
-- for expanded (titulo imagen, fecha, nombre apellido (nombre regular y apellido bold), url instagram -- abajo derecha)
-
-when expanded make next/prev arrows
-
-
-
-flip scroll direction on mobile |2
-
-when expanded in mobile, make sliding screen available to move to next/prev image |4
-
-** drag bar en mobile y desktop |3
-* line/ticks indicators next to images in stack view |3
-* progress dots of images and persons images when expanded |4
-* zoom in/zoom out the stack buttons? |2
-* make intro of the unpacking |5
+change images to better performing images and put in all of the images

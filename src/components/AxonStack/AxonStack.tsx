@@ -9,7 +9,7 @@ import {
 } from "@react-three/drei";
 import * as THREE from "three";
 import "./AxonStack.css"
-import logo from "../../assets/endmarks_logo.png";
+import fotowalkLogo from "../../assets/EF3_TYPE.png";
 import shortLogo from "../../assets/endmarks_short_logo.png";
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -23,6 +23,9 @@ const FALLBACK_DATA_URL =
 
 // Reusable constants
 const VEC_NEG_Z = new THREE.Vector3(0, 0, -1);
+
+const SHARED_PLANE_GEOM = new THREE.PlaneGeometry(1, 1); // for card face & backdrop
+const SHARED_BOX_GEOM = new THREE.BoxGeometry(1, 1, 1);
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Context
@@ -80,7 +83,10 @@ function setTextureSRGB(tex: THREE.Texture) {
 // Main
 // ────────────────────────────────────────────────────────────────────────────────
 export default function ClickableAxonStackDebug() {
+  const isMobile = useIsMobile(768);
+
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [centeredIdx, setCenteredIdx] = useState(0);
 
   const camRef = useRef<THREE.OrthographicCamera>(null!);
   const clearStageRef = useRef<(() => void) | null>(null);
@@ -89,7 +95,7 @@ export default function ClickableAxonStackDebug() {
   const navApiRef = useRef<StackNavApi | null>(null);
 
   const IMAGES = useMemo<string[]>(
-    () => Array.from({ length: 82 }, (_, i) => `/stack-images/${String(i).padStart(3, "0")}.jpg`),
+    () => Array.from({ length: 82 }, (_, i) => `/stack-images/thumb/${String(i).padStart(3, "0")}.jpg`),
     []
   );
 
@@ -122,7 +128,7 @@ export default function ClickableAxonStackDebug() {
       { name: "David Rodríguez", indices: [safe(77), safe(81)] },
       { name: "Erika Pérez", indices: [safe(82), safe(90)] },
 
-      // { name: "Gabriel Saga Saldaña", indices: [safe(48), safe(58)] },
+      // { name: `Gabriel "Saga" Saldaña`, indices: [safe(48), safe(58)] },
       // { name: "Gabriel Morales", indices: [safe(48), safe(58)] },
       // { name: "gabriel soria flecha", indices: [safe(48), safe(58)] },
       // { name: "giancarlos merced", indices: [safe(48), safe(58)] },
@@ -179,6 +185,27 @@ export default function ClickableAxonStackDebug() {
     return null;
   }, [expandedIdx, GROUP_RANGES, ANCHORS]);
 
+  type ExpandedInfo = {
+    current: number;  // 1-based
+    total: number;
+    start: number;
+    end: number;
+  };
+
+  const expandedInfo = useMemo<ExpandedInfo | null>(() => {
+    if (expandedIdx == null) return null;
+
+    for (let gi = 0; gi < GROUP_RANGES.length; gi++) {
+      const [s, e] = GROUP_RANGES[gi]; // already ordered in your GROUP_RANGES
+      if (expandedIdx >= s && expandedIdx <= e) {
+        const total = e - s + 1;
+        const current = Math.min(Math.max(expandedIdx - s + 1, 1), total); // clamp, 1-based
+        return { current, total, start: s, end: e };
+      }
+    }
+    return null;
+  }, [expandedIdx, GROUP_RANGES]);
+
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
@@ -204,10 +231,10 @@ export default function ClickableAxonStackDebug() {
           }}
         />
 
-        <ambientLight intensity={0.8} />
+        <ambientLight intensity={0} />
         <directionalLight position={[5, 5, 5]} />
 
-        <ScrollControls pages={pages} damping={0.15}>
+        <ScrollControls pages={pages} damping={0}>
           <group
             rotation={[
               THREE.MathUtils.degToRad(120),
@@ -219,13 +246,14 @@ export default function ClickableAxonStackDebug() {
               planes={planeCount}
               gap={GAP}
               overshoot={0.0}
-              ease={0.08}
+              ease={0.12}
               clearStageExternalRef={clearStageRef}
               collapseExpandedExternalRef={collapseExpandedRef}
               navApiExternalRef={navApiRef}
               groupRanges={GROUP_RANGES}
               groupNames={GROUP_NAMES}
               onExpandedChange={setExpandedIdx}
+              onCenterChange={setCenteredIdx}
             >
               <KeyboardNavigator planes={planeCount} />
               <AxonStack
@@ -252,10 +280,11 @@ export default function ClickableAxonStackDebug() {
         <div className="axon-names__list">
           {ANCHORS.map((a) => {
             const [start, end] = a.indices;
+            const active = centeredIdx >= start && centeredIdx <= end;
             return (
               <button
                 key={a.name}
-                className="axon-names__btn"
+                className={`axon-names__btn ${active ? "is-active" : ""}`}
                 onClick={() =>
                   navApiRef.current?.goToRangeAndStage(start, end, STAGE_GAP_WHEN_STAGED)
                 }
@@ -269,21 +298,22 @@ export default function ClickableAxonStackDebug() {
       </div>
 
       {/* CITY + DATE (top-left) */}
-      <div className="axon-meta">
-        Ponce, PR
-        <br />
-        <span className="axon-meta__date">21 de Junio de 2025</span>
-      </div>
+      {!isMobile && (
+        <div className="axon-meta">
+          ponce, pr
+          <br />
+          <span className="axon-meta__date">21.06.2025</span>
+        </div>
+      )}
 
       {/* TITLE (top-center) */}
       <div className="axon-title">
-        {/* <img src={shortLogo} alt="Logo" /> */}
-        El Fotowalk
+        <img src={fotowalkLogo} alt="Logo" />
       </div>
 
       {/* LOGO (bottom-center) */}
       <div className="axon-logo">
-        <img src={logo} alt="Logo" />
+        <img src={shortLogo} alt="Logo" />
       </div>
 
       {/* EXPANDED OVERLAY */}
@@ -311,6 +341,12 @@ export default function ClickableAxonStackDebug() {
               →
             </button>
           </div>
+
+          {expandedInfo && (
+            <div className="axon-expanded__count">
+              ({expandedInfo.current}/{expandedInfo.total})
+            </div>
+          )}
 
           <div className="axon-expanded__name">{expandedName.name}</div>
 
@@ -345,6 +381,11 @@ function AxonStack({
   height = 1,
   lift = 1,
   liftSpeed = 0.15,
+  showTicksEvery = 5,
+  tickOffset = 0.08,      // margin beyond card edge
+  tickLength = 0.14,      // visual length of the line
+  tickThickness = 0.006,  // line thickness
+  tickSide = "right" as "left" | "right", // which side of the card
 }: {
   images?: string[];
   planes?: number;
@@ -353,6 +394,11 @@ function AxonStack({
   height?: number;
   lift?: number;
   liftSpeed?: number;
+  showTicksEvery?: number;
+  tickOffset?: number;
+  tickLength?: number;
+  tickThickness?: number;
+  tickSide?: "left" | "right";
 }) {
   const planeScale: [number, number] = [width, height];
 
@@ -368,6 +414,12 @@ function AxonStack({
           lift={lift}
           liftSpeed={liftSpeed}
           renderOrder={planes - i}
+          showTick={showTicksEvery > 0 && i % showTicksEvery === 0}
+          tickSide={tickSide}
+          tickOffset={tickOffset}
+          tickLength={tickLength}
+          tickThickness={tickThickness}
+          isLast={i === planes - 1}
         />
       ))}
     </group>
@@ -384,9 +436,12 @@ const CARD_ROTATE_SPD = 0.2;
 const CARD_MOVE_SPD = 0.18;
 const CARD_SCALE_SPD = 0.18;
 const CARD_RETURN_SPD = 0.18;
-const CARD_SCALE_EXPANDED = 4.25;
+const CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE = 4.25;
+const CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT = 3.75;
+const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.9;
+const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 4;
 const CARD_OFF_SCREEN_X = 1.0;
-const CARD_OFF_SCREEN_Y = -0.6;
+const CARD_OFF_SCREEN_Y = -0.75;
 const CARD_CENTER_NUDGE_X = -1.0;
 const CARD_CENTER_NUDGE_Y = 0.6;
 const CARD_STAGE_GAP_ABS = 2;
@@ -403,6 +458,12 @@ function Card({
   lift,
   liftSpeed,
   renderOrder,
+  showTick = false,
+  tickSide = "right",
+  tickOffset = 0.8,
+  tickLength = 0.14,
+  tickThickness = 0.006,
+  isLast = false
 }: {
   src?: string;
   index: number;
@@ -411,23 +472,36 @@ function Card({
   lift: number;
   liftSpeed: number;
   renderOrder: number;
+  showTick?: boolean;
+  tickSide?: "left" | "right";
+  tickOffset?: number;
+  tickLength?: number;
+  tickThickness?: number;
+  isLast?: boolean
 }) {
+  const isMobile = useIsMobile(768);
+
+  const lastTickLength = isLast ? tickLength : tickLength; // shorter at the end
+
   const ctx = useContext(StackScrollContext);
   const { camera } = useThree();
 
   const ref = useRef<THREE.Group>(null!);
   const meshRef = useRef<THREE.Mesh>(null!);
-  const matRef = useRef<THREE.MeshBasicMaterial>(null!);
   const imgSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const fitTRef = useRef(0); // 0 = cover, 1 = contain
   const FIT_SPD = 0.18;
   const backdropRef = useRef<THREE.Mesh>(null!);
   const backdropMatRef = useRef<THREE.MeshBasicMaterial>(null!);
+  const tickRef = useRef<THREE.Mesh>(null!);
 
   const [hovered, setHovered] = useState(false);
   const expanded = (ctx?.expandedIndexRef?.current ?? null) === index;
   const [waitingToStage, setWaitingToStage] = useState(false);
   useCursor(hovered);
+
+  const frontMat = React.useMemo(() => makeBaseFrontMaterial(), []);
+  const matRef = useRef<THREE.MeshBasicMaterial>(frontMat);
 
   // Texture
   const tex = useTexture(src ?? FALLBACK_DATA_URL);
@@ -458,6 +532,19 @@ function Card({
     };
   }, [tex, src]);
 
+
+  useEffect(() => {
+    if (!matRef.current) return;
+    matRef.current.map = tex ?? undefined; // tex from your loader
+    if (tex) {
+      // optional sampling tweaks; keep or remove depending on your needs
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+      tex.needsUpdate = true;
+    }
+    matRef.current.needsUpdate = true;
+  }, [tex]);
 
   const baseZ = useMemo(() => index * gap, [index, gap]);
 
@@ -496,9 +583,16 @@ function Card({
     }
 
     // Prepare texture mapping with current fitT
+    let containFx = 1, containFy = 1;
+
     const iw = imgSizeRef.current.w;
     const ih = imgSizeRef.current.h;
-    let containFx = 1, containFy = 1;
+    const planeIsPortrait = size[1] >= size[0];
+    const isPortrait = (iw > 0 && ih > 0) ? (ih >= iw) : planeIsPortrait;
+
+    const expandedBaseScale = isMobile
+      ? (isPortrait ? CARD_SCALE_EXPANDED_MOBILE_PORTRAIT : CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE)
+      : (isPortrait ? CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT : CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE);
 
     if (iw > 0 && ih > 0) {
       const cover = computeCoverParams(iw, ih, size[0], size[1]);
@@ -563,8 +657,8 @@ function Card({
       parent.worldToLocal(tmpLocal.copy(tmpWorld));
 
       const anisotropicTarget = new THREE.Vector3(
-        CARD_SCALE_EXPANDED * (iw > 0 ? THREE.MathUtils.lerp(1, containFx, fitTRef.current) : 1),
-        CARD_SCALE_EXPANDED * (iw > 0 ? THREE.MathUtils.lerp(1, containFy, fitTRef.current) : 1),
+        expandedBaseScale * (iw > 0 ? THREE.MathUtils.lerp(1, containFx, fitTRef.current) : 1),
+        expandedBaseScale * (iw > 0 ? THREE.MathUtils.lerp(1, containFy, fitTRef.current) : 1),
         1
       );
 
@@ -689,7 +783,15 @@ function Card({
       matRef.current.opacity = 1;
     }
 
-    // Stage persists; it will follow the center in LocalZScroller
+    if (tickRef.current) {
+      if (!expanded) {
+        // Parent (ref) is being lifted on Y; negate it on the child tick
+        tickRef.current.position.y = -ref.current.position.y;
+      } else {
+        // In expanded mode, let the tick follow normally
+        tickRef.current.position.y = 0;
+      }
+    }
   });
 
   const handleClick = useCallback(() => {
@@ -732,8 +834,7 @@ function Card({
   return (
     <group ref={ref} position={[0, 0, baseZ]} renderOrder={renderOrder}>
 
-      <mesh ref={backdropRef} visible={false}>
-        <planeGeometry args={[1, 1]} />
+      <mesh ref={backdropRef} visible={false} geometry={SHARED_PLANE_GEOM}>
         <meshBasicMaterial
           ref={backdropMatRef}
           color="white"
@@ -746,9 +847,26 @@ function Card({
         />
       </mesh>
 
+      {showTick && (
+        <mesh
+          ref={tickRef}
+          geometry={SHARED_BOX_GEOM}
+          // horizontal bar: X = length, Y = thin, Z = thin
+          position={[
+            (tickSide === "right" ? +1 : -1) * (size[0] / 1.2 + tickOffset),
+            0,
+            -0.712,
+          ]}
+          scale={[lastTickLength, tickThickness, tickThickness]}
+        >
+          <meshBasicMaterial color="#adadad" toneMapped={false} />
+        </mesh>
+      )}
+
       <mesh
         ref={meshRef}
         rotation={[0, 0, Math.PI]}
+        scale={[-1, 1, 1]}
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
@@ -772,6 +890,7 @@ function Card({
           side={THREE.DoubleSide}
         />
       </mesh>
+
     </group>
   );
 }
@@ -825,13 +944,14 @@ function LocalZScroller({
   ease = 0.1,
   start = 0,
   end = 1,
-  snapEndThreshold = 0.995,
+  snapEndThreshold = 1.5,
   clearStageExternalRef,
   collapseExpandedExternalRef,
   navApiExternalRef,
   groupRanges,
   groupNames,
   onExpandedChange,
+  onCenterChange,
 }: {
   children: React.ReactNode;
   distance?: number;
@@ -848,6 +968,7 @@ function LocalZScroller({
   groupRanges?: [number, number][];
   groupNames?: string[];
   onExpandedChange?: (idx: number | null) => void;
+  onCenterChange?: (idx: number) => void;
 }) {
   const ref = useRef<THREE.Group>(null!);
   const scroll = useScroll();
@@ -855,6 +976,7 @@ function LocalZScroller({
   const zRef = useRef(0);
   const centerIndexRef = useRef(0);
   const zSmoothed = useRef(0);
+  const pSmoothRef = useRef(0);
 
   const autoDistance = useMemo(() => {
     if (typeof distance === "number") return distance;
@@ -883,6 +1005,8 @@ function LocalZScroller({
   const prevStagedIndexRef = useRef<number | null>(null);
   const prevRangeStartRef = useRef<number | null>(null);
   const prevRangeEndRef = useRef<number | null>(null);
+
+  const lastEmittedCenterRef = useRef<number>(centerIndexRef.current ?? 0);
 
   // pending “stage-after-arrive” for ranges
   const pendingStageRangeRef = useRef<{ start: number; end: number; gapAbs: number } | null>(null);
@@ -922,7 +1046,7 @@ function LocalZScroller({
       const el = (scroll as any).el as HTMLElement | undefined;
       if (!el) return;
       const max = Math.max(1, el.scrollHeight - el.clientHeight);
-      el.scrollTo({ top: pGlobal * max, behavior: (opts?.animate === false || navLockRef.current > 0) ? "auto" : "smooth" });
+      el.scrollTo({ top: pGlobal * max, behavior: "auto" });
     },
     [planes, gap, autoDistance, start, end, scroll]
   );
@@ -1146,47 +1270,94 @@ function LocalZScroller({
     return () => { navApiExternalRef.current = null; };
   }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges]);
 
-  useFrame(() => {
+  useFrame((state, dt) => {
     const raw = scroll.offset;
-    let p = THREE.MathUtils.clamp((raw - start) / Math.max(1e-6, end - start), 0, 1);
-    if (p > snapEndThreshold) p = 1;
-
+  
+    // 1) Normalize to [0,1] in your window
+    let p = THREE.MathUtils.clamp(
+      (raw - start) / Math.max(1e-6, end - start),
+      0,
+      1
+    );
+  
+    // Optional physical end detection
+    const el = (scroll as any).el as HTMLElement | undefined;
+    if (el) {
+      const max = Math.max(0, el.scrollHeight - el.clientHeight);
+      const atTop = el.scrollTop <= 1;
+      const atBottom = Math.abs(el.scrollTop - max) <= 1;
+      if (atTop) p = 0;
+      if (atBottom) p = 1;
+    }
+  
+    const snap = (snapEndThreshold ?? 0.995);
+    if (p > snap) p = 1;
+    else if (p < (1 - snap)) p = 0;
+  
+    // 2) Map to local Z target
     const zTarget = THREE.MathUtils.lerp(0, autoDistance, p);
+  
+    // 3) HYBRID CONTROLLER (no p==0/1 snap for zSmoothed)
+    const oneGap = (gap ?? 0.018);
+  
+    // Far threshold: when we're farther than this, use constant-speed catchup
+    const farThreshold = oneGap * 8.9;           // ~60% of one card spacing
+    const maxSpeed    = oneGap * 44;             // cards per second (try 12–18)
+    const maxStep     = maxSpeed * dt;           // per-frame step cap
+
+  
+    const delta = zTarget - zSmoothed.current;
+  
+    if (Math.abs(delta) > farThreshold) {
+      // FAR: constant-speed catchup (predictable, no “laggy” feel)
+      const step = Math.sign(delta) * maxStep;
+      zSmoothed.current += Math.abs(delta) > Math.abs(step) ? step : delta;
+    } else {
+      // NEAR: exponential ease-out (natural slowdown)
+      const tau   = 0.1;                        // your chosen snappiness
+      const alpha = 1 - Math.exp(-dt / Math.max(1e-4, tau));
+      zSmoothed.current += delta * alpha;
+    }
+  
+    // Numeric snap only (finish tiny remainder cleanly)
+    const eps = Math.max(1e-4, oneGap * 0.0001);
+    if (Math.abs(zTarget - zSmoothed.current) < eps) {
+      zSmoothed.current = zTarget;
+    }
+  
     zRef.current = zTarget;
-
-    // center index will be computed from zSmoothed below for stability
-
-    zSmoothed.current += (zTarget - zSmoothed.current) * ease;
-
+  
+    // 4) ---- the rest stays like you had it ----
+  
+    // Stage-after-arrive (single)
     if (
       pendingStageIndexRef.current !== null &&
       centerIndexRef.current === pendingStageIndexRef.current
     ) {
       stageAt(centerIndexRef.current, pendingStageGapRef.current);
-      pendingStageIndexRef.current = null; // clear
+      pendingStageIndexRef.current = null;
     }
-
-    // NEW: follow-range with fixed span around the center
+  
+    // Follow-range with fixed span
     if (
       stagedRangeStartRef.current !== null &&
       stagedRangeEndRef.current !== null &&
       stageGapRef.current > 0
     ) {
-      const span = stagedRangeSpanRef.current; // e - s
+      const span = stagedRangeSpanRef.current;
       const center = centerIndexRef.current;
       const maxIdx = (planes ?? 1) - 1;
       const maxStart = Math.max(0, maxIdx - span);
-
-      // keep same span, center it on "center"
-      let start = Math.floor(center - span / 2);
-      start = Math.max(0, Math.min(maxStart, start));
-      const end = start + span;
-
-      stagedRangeStartRef.current = start;
-      stagedRangeEndRef.current = end;
+  
+      let startFollow = Math.floor(center - span / 2);
+      startFollow = Math.max(0, Math.min(maxStart, startFollow));
+      const endFollow = startFollow + span;
+  
+      stagedRangeStartRef.current = startFollow;
+      stagedRangeEndRef.current = endFollow;
     }
-
-    // stage the range once we arrive at its center
+  
+    // Stage the range once we arrive at its center
     if (pendingStageRangeRef.current) {
       const { start, end, gapAbs } = pendingStageRangeRef.current;
       const targetCenter = Math.round((start + end) / 2);
@@ -1201,18 +1372,17 @@ function LocalZScroller({
       stageAt(centerIndexRef.current, pendingStageGapRef.current);
       pendingStageIndexRef.current = null;
     }
-
-
-    // Compute stable center index from the SMOOTHED z to avoid jitter
+  
+    // 5) Compute center index from **zSmoothed** (keeps lift and camera in sync)
     if (navLockRef.current > 0) {
       navLockRef.current -= 1;
     } else {
-      const idxFloatSmoothed = gap && gap > 0 ? -zSmoothed.current / gap : 0;
+      const idxFloatSmoothed = oneGap > 0 ? -zSmoothed.current / oneGap : 0;
       let nearest = Math.round(idxFloatSmoothed);
       nearest = Math.max(0, Math.min((planes ?? 1) - 1, nearest));
-
-      // Hysteresis: require ~0.35 index movement before switching center
-      if (typeof planes === "number" && typeof gap === "number" && gap > 0) {
+  
+      // Hysteresis to avoid micro-flips
+      if (typeof planes === "number" && oneGap > 0) {
         const prevCenter = (centerIndexRef as any).prev ?? 0;
         let idxStable = nearest;
         if (Math.abs(idxFloatSmoothed - prevCenter) < 0.35) {
@@ -1222,32 +1392,34 @@ function LocalZScroller({
         (centerIndexRef as any).prev = idxStable;
       }
     }
-
+  
+    // 6) Apply transform once
     ref.current.position.set(0, 0, zSmoothed.current);
+  
+    // Open group gaps after we arrive
     if (pendingGroupGapRef.current) {
       const { s, gapAbs, gid } = pendingGroupGapRef.current;
       if (centerIndexRef.current === s) {
         groupGapsActiveRef.current = true;
         stageGapRef.current = gapAbs;
-        if (typeof gid === "number") {
-          focusGroupRef.current = gid;
-        }
+        if (typeof gid === "number") focusGroupRef.current = gid;
         pendingGroupGapRef.current = null;
       }
     }
-
-    ref.current.position.set(0, 0, zSmoothed.current);
-
-    // one-shot lock to skip expand/return lerps on keypress
+  
+    if (onCenterChange && centerIndexRef.current !== lastEmittedCenterRef.current) {
+      lastEmittedCenterRef.current = centerIndexRef.current;
+      onCenterChange(centerIndexRef.current);
+    }
+  
     if (expandedSwitchLockRef.current > 0) expandedSwitchLockRef.current -= 1;
-
-    // If a stage exists, make it follow the current center index
+  
     if (stagedIndexRef.current !== null && stageGapRef.current > 0) {
       if (stagedIndexRef.current !== centerIndexRef.current) {
         stagedIndexRef.current = centerIndexRef.current;
       }
     }
-  });
+  });  
 
   const contextValue = useMemo(
     () => ({
@@ -1357,4 +1529,32 @@ function KeyboardNavigator({ planes }: { planes: number }) {
   }, [ctx, planes]);
 
   return null;
+}
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = React.useState(false);
+
+  React.useEffect(() => {
+    const check = () => setIsMobile(typeof window !== "undefined" && window.innerWidth <= breakpoint);
+    check(); // initial
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Base material (cheap to clone per card)
+// ────────────────────────────────────────────────────────────────────────────────
+function makeBaseFrontMaterial() {
+  const m = new THREE.MeshBasicMaterial({
+    toneMapped: false,
+    side: THREE.DoubleSide,
+    transparent: false,
+    depthTest: true,
+    depthWrite: true,
+    opacity: 1,
+  });
+  return m;
 }
