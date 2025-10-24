@@ -12,6 +12,39 @@ import "./AxonStack.css"
 import fotowalkLogo from "../../assets/EF3_TYPE.png";
 import shortLogo from "../../assets/endmarks_short_logo.png";
 
+// ── DEBUG TEST KNOBS ─────────────────────────────────────────
+const TEST = {
+  PAGES_SCALE: 0.25,        // >1 = DOM scroll area bigger; <1 = smaller
+  OVERSHOOT: 0,          // positive adds more scroll distance at both ends
+  GAP_BASE_MULT: 1,      // scales your base card spacing GAP
+  GROUP_GAP_OVERRIDE: -1 // -1 = use real stageGap; otherwise force a number (e.g. 0, 2, 8)
+};
+
+// ── BEHAVIOR KNOBS ─────────────────────────────────────────
+const CARD_FRONT_SHIFT = 0;
+const CARD_PULL = 2.0;
+const CARD_ROTATE_SPD = 0.2;
+const CARD_MOVE_SPD = 0.18;
+const CARD_SCALE_SPD = 0.18;
+const CARD_RETURN_SPD = 0.18;
+const CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE = 4.25;
+const CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT = 3.75;
+const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.9;
+const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 4;
+const CARD_OFF_SCREEN_X = 1.0;
+const CARD_OFF_SCREEN_Y = -0.75;
+const CARD_CENTER_NUDGE_X = -1.0;
+const CARD_CENTER_NUDGE_Y = 0.6;
+const CARD_STAGE_GAP_ABS = 2;
+const EXPANDED_RENDER_ORDER = 1_000_000;
+const STAGE_GAP_WHEN_STAGED = 2;
+const STAGE_GAP_WHEN_EXPANDED = 10;
+const BACKDROP_FADE_SPD = 0.18;
+const CARD_Z_LERP = 0.2;
+const CARD_FAR_THOLD = 8.9;
+const CARD_MAX_SPD = 84;
+const TAU = 0.2;     
+
 // ────────────────────────────────────────────────────────────────────────────────
 // Config / Debug
 // ────────────────────────────────────────────────────────────────────────────────
@@ -99,17 +132,9 @@ export default function ClickableAxonStackDebug() {
     []
   );
 
-  const GAP = 0.18;
+  // const GAP = 0.18;
+  const GAP = 0.18 * TEST.GAP_BASE_MULT;
   const planeCount = IMAGES.length;
-
-  const depth = (planeCount - 1) * GAP;
-  const CAM_Y = Math.max(10, depth + 2);
-  const pages = Math.max(2, 1 + depth / 10);
-
-  useEffect(() => {
-    if (!DEBUG) return;
-    console.log("Images list (first 5):", IMAGES.slice(0, 5), "total:", IMAGES.length);
-  }, [IMAGES]);
 
   const ANCHORS = useMemo<Photographer[]>(() => {
     const safe = (i: number) => Math.max(0, Math.min(planeCount - 1, i));
@@ -174,6 +199,25 @@ export default function ClickableAxonStackDebug() {
   }, [ANCHORS]);
 
   const GROUP_NAMES = useMemo<string[]>(() => ANCHORS.map(a => a.name), [ANCHORS]);
+
+  const baseDepth = (planeCount - 1) * GAP;
+  const CAM_Y = Math.max(10, baseDepth + 2);
+  const groupsCount = GROUP_RANGES.length;
+  const extraPerBreakMax = Math.max(
+    0,
+    Math.max(STAGE_GAP_WHEN_STAGED, STAGE_GAP_WHEN_EXPANDED) - GAP
+  );
+  const extraDepthMax = Math.max(0, (groupsCount - 1) * extraPerBreakMax);
+  const effectiveDepthMax = baseDepth + extraDepthMax;
+
+  // const pages = Math.max(2, 1 + effectiveDepthMax / 10);
+  const pagesBase = Math.max(2, 1 + effectiveDepthMax / 10);
+  const pages = pagesBase * TEST.PAGES_SCALE;
+
+  useEffect(() => {
+    if (!DEBUG) return;
+    console.log("Images list (first 5):", IMAGES.slice(0, 5), "total:", IMAGES.length);
+  }, [IMAGES]);
 
   type Photographer = { name: string; instagram?: string; indices: [number, number] };
   const expandedName = useMemo<Photographer | null>(() => {
@@ -245,7 +289,7 @@ export default function ClickableAxonStackDebug() {
             <LocalZScroller
               planes={planeCount}
               gap={GAP}
-              overshoot={0.0}
+              overshoot={TEST.OVERSHOOT}
               ease={0.12}
               clearStageExternalRef={clearStageRef}
               collapseExpandedExternalRef={collapseExpandedRef}
@@ -429,26 +473,6 @@ function AxonStack({
 // ────────────────────────────────────────────────────────────────────────────────
 // Card (single plane)
 // ────────────────────────────────────────────────────────────────────────────────
-// Behavior knobs (kept identical to original intent)
-const CARD_FRONT_SHIFT = 0;
-const CARD_PULL = 2.0;
-const CARD_ROTATE_SPD = 0.2;
-const CARD_MOVE_SPD = 0.18;
-const CARD_SCALE_SPD = 0.18;
-const CARD_RETURN_SPD = 0.18;
-const CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE = 4.25;
-const CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT = 3.75;
-const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.9;
-const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 4;
-const CARD_OFF_SCREEN_X = 1.0;
-const CARD_OFF_SCREEN_Y = -0.75;
-const CARD_CENTER_NUDGE_X = -1.0;
-const CARD_CENTER_NUDGE_Y = 0.6;
-const CARD_STAGE_GAP_ABS = 2;
-const EXPANDED_RENDER_ORDER = 1_000_000;
-const STAGE_GAP_WHEN_STAGED = 2;
-const STAGE_GAP_WHEN_EXPANDED = 10;
-const BACKDROP_FADE_SPD = 0.18;
 
 function Card({
   src,
@@ -684,18 +708,21 @@ function Card({
       }
 
       if (backdropRef.current && backdropMatRef.current && ref.current) {
-        // match transform
+        const mat = backdropMatRef.current;
         backdropRef.current.quaternion.copy(ref.current.quaternion);
         backdropRef.current.position.copy(ref.current.position);
         backdropRef.current.scale.set(200, 200, 1);
         backdropRef.current.renderOrder = EXPANDED_RENDER_ORDER - 1;
+        backdropRef.current.visible = true;
 
-        // fade in
-        const mat = backdropMatRef.current;
-        backdropRef.current.visible = true; // ensure it can draw while fading
-        const target = 1;                   // fully on when expanded
-        mat.opacity += (target - mat.opacity) * BACKDROP_FADE_SPD;
-        if (Math.abs(target - mat.opacity) < 1e-3) mat.opacity = target;
+        // snap to full white during arrow switch to avoid glimpse
+        if (switchLock > 0) {
+          mat.opacity = 1;
+        } else {
+          const target = 1;
+          mat.opacity += (target - mat.opacity) * BACKDROP_FADE_SPD;
+          if (Math.abs(target - mat.opacity) < 1e-3) mat.opacity = target;
+        }
       }
 
       return;
@@ -704,18 +731,23 @@ function Card({
     // fade out when not expanded
     if (backdropRef.current && backdropMatRef.current) {
       const mat = backdropMatRef.current;
-      const target = 0;
-      mat.opacity += (target - mat.opacity) * BACKDROP_FADE_SPD;
-      if (Math.abs(mat.opacity - target) < 1e-3) {
-        mat.opacity = 0;
-        backdropRef.current.visible = false; // hide once fully transparent
+    
+      // if we JUST lost expansion because of a switch, keep the white plate up
+      if (switchLock > 0 && lastExpanded === index) {
+        backdropRef.current.visible = true;
+        mat.opacity = 1; // hold at full white during the switch
       } else {
-        backdropRef.current.visible = true; // keep drawing during fade
+        const target = 0;
+        mat.opacity += (target - mat.opacity) * BACKDROP_FADE_SPD;
+        if (Math.abs(mat.opacity - target) < 1e-3) {
+          mat.opacity = 0;
+          backdropRef.current.visible = false; // hide only once fully transparent
+        } else {
+          backdropRef.current.visible = true; // keep drawing during fade
+        }
       }
     }
-
-    // --- collapsed/staged path ---
-    if (backdropRef.current) backdropRef.current.visible = false;
+    
 
     // Collapsed / staged behavior
     ref.current.position.x += (0 - ref.current.position.x) * CARD_RETURN_SPD;
@@ -760,7 +792,7 @@ function Card({
       ref.current.position.y = targetY;
       ref.current.position.z = targetZ;
     } else {
-      ref.current.position.z += (targetZ - ref.current.position.z) * 0.3;
+      ref.current.position.z += (targetZ - ref.current.position.z) * CARD_Z_LERP;
     }
 
     if (switchLock > 0 && lastExpanded === index) {
@@ -976,16 +1008,6 @@ function LocalZScroller({
   const zRef = useRef(0);
   const centerIndexRef = useRef(0);
   const zSmoothed = useRef(0);
-  const pSmoothRef = useRef(0);
-
-  const autoDistance = useMemo(() => {
-    if (typeof distance === "number") return distance;
-    if (typeof planes === "number" && typeof gap === "number") {
-      const depth = (planes - 1) * gap;
-      return -(depth + overshoot);
-    }
-    return 0;
-  }, [distance, planes, gap, overshoot]);
 
   const stagedIndexRef = useRef<number | null>(null);
   const stageGapRef = useRef<number>(0);
@@ -1007,6 +1029,38 @@ function LocalZScroller({
   const prevRangeEndRef = useRef<number | null>(null);
 
   const lastEmittedCenterRef = useRef<number>(centerIndexRef.current ?? 0);
+
+  const stageOffsetForIndex = useCallback((i: number) => {
+    const g = gap ?? 0;
+    const stageGap = stageGapRef.current ?? 0;
+    if (!(groupGapsActiveRef.current && stageGap > 0)) return 0;
+
+    const map = groupIndexMapRef.current;
+    const gi = map ? map[i] : -1;
+    if (gi < 0) return 0;
+
+    const focusG = focusGroupRef.current ?? 0;
+    const delta = Math.max(0, stageGap - g);
+    return (gi - focusG) * delta;
+  }, [gap]);
+
+  // Where the stack really starts/ends in Z right now
+  const getZSpan = useCallback(() => {
+    const g = gap ?? 0;
+    const maxIdx = Math.max(0, (planes ?? 1) - 1);
+
+    // stage offsets for first/last card with current group state
+    const offTop = stageOffsetForIndex(0);
+    const offBottom = stageOffsetForIndex(maxIdx);
+
+    const zTop = -(0 * g + offTop);
+    const zBottom = -(maxIdx * g + offBottom);
+
+    // NOTE: zBottom is typically < zTop (more negative)
+    const span = zBottom - zTop; // negative number; length = Math.abs(span)
+
+    return { zTop, zBottom, span };
+  }, [gap, planes, stageOffsetForIndex]);
 
   // pending “stage-after-arrive” for ranges
   const pendingStageRangeRef = useRef<{ start: number; end: number; gapAbs: number } | null>(null);
@@ -1037,10 +1091,17 @@ function LocalZScroller({
 
   const centerOn = useCallback(
     (index: number, opts?: { animate?: boolean }) => {
-      if (!planes || !gap) return;
+      if (!planes || gap == null) return;
       const i = Math.max(0, Math.min(planes - 1, index));
-      const targetZ = -(i * gap);
-      const pLocal = autoDistance !== 0 ? THREE.MathUtils.clamp(targetZ / autoDistance, 0, 1) : 0;
+
+      // target card Z with whatever gaps are active *right now*
+      const g = gap ?? 0;
+      const targetZ = -(i * g + stageOffsetForIndex(i));
+
+      // map to DOM scroll using the **actual** z span
+      const { zTop, zBottom, span } = getZSpan();
+      const spanLen = Math.abs(span) > 1e-9 ? span : -1; // guard
+      const pLocal = THREE.MathUtils.clamp((targetZ - zTop) / (zBottom - zTop), 0, 1);
       const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
 
       const el = (scroll as any).el as HTMLElement | undefined;
@@ -1048,7 +1109,7 @@ function LocalZScroller({
       const max = Math.max(1, el.scrollHeight - el.clientHeight);
       el.scrollTo({ top: pGlobal * max, behavior: "auto" });
     },
-    [planes, gap, autoDistance, start, end, scroll]
+    [planes, gap, start, end, scroll, stageOffsetForIndex, getZSpan]
   );
 
   const stageRangeAt = useCallback((start: number, end: number, gapAbs: number) => {
@@ -1072,18 +1133,35 @@ function LocalZScroller({
   }, []);
 
   const clearStage = useCallback(() => {
-    // legacy single/range staging
+    // Keep whichever card is currently centered
+    const keepIndex = centerIndexRef.current ?? 0;
+
+    // Clear legacy single/range staging
     stagedIndexRef.current = null;
     stagedRangeStartRef.current = null;
     stagedRangeEndRef.current = null;
     stagedRangeSpanRef.current = 0;
+
+    // Turn off group gaps
+    const wasGroupGaps = !!groupGapsActiveRef.current;
+    groupGapsActiveRef.current = false;
     stageGapRef.current = 0;
 
-    // ALSO turn off group-gaps mode
-    if (typeof (groupGapsActiveRef?.current) === "boolean") {
-      groupGapsActiveRef.current = false;
+    if (wasGroupGaps) {
+      // Snap stack Z to where THIS same index lives with gaps closed
+      const g = gap ?? 0;
+      const zSnap = -(keepIndex * g);
+      zSmoothed.current = zSnap;   // snap the internal integrator
+      zRef.current = zSnap;
+      if (ref.current) ref.current.position.set(0, 0, zSnap);
+
+      // Sync DOM scroll to new mapping so camera/lift and index stay aligned
+      centerOn(keepIndex);
+      navLockRef.current = 2; // avoid jitter for a couple frames
     }
-  }, []);
+  }, [gap, centerOn]);
+
+
 
 
   const [expandedIndex, setExpandedIndexState] = useState<number | null>(null);
@@ -1158,9 +1236,13 @@ function LocalZScroller({
         // defensive: clear any pending stage actions
         pendingStageIndexRef.current = null;
         pendingStageRangeRef.current = null;
+
+        const keepIndex = centerIndexRef.current ?? 0;
+        centerOn(keepIndex);
+        navLockRef.current = 2;
       }
     }
-  }, [onExpandedChange]);
+  }, [onExpandedChange, centerOn]);
 
   const collapseExpanded = useCallback(() => {
     if (expandedIndexRef.current != null) {
@@ -1242,11 +1324,7 @@ function LocalZScroller({
         // 1) Clear any single/range staging visuals
         clearStage();
 
-        // 2) COLLAPSE group gaps immediately
-        groupGapsActiveRef.current = false;
-        stageGapRef.current = 0;
-
-        // 3) Compute clamped start/end and target group id
+        // 2) Compute clamped start/end and target group id
         const s = Math.max(0, Math.min((planes ?? 1) - 1, Math.min(start, end)));
         const e = Math.max(0, Math.min((planes ?? 1) - 1, Math.max(start, end)));
 
@@ -1257,11 +1335,19 @@ function LocalZScroller({
           if (gid < 0) gid = Math.max(0, groupRanges.findIndex(([gs, ge]) => s >= gs && s <= ge));
         }
 
-        // 4) Defer opening group gaps until we ARRIVE at s
-        pendingGroupGapRef.current = { s, e, gapAbs: Math.max(0, gapAbs), gid };
+        // 3) OPEN THE GAPS NOW (before we move)
+        groupGapsActiveRef.current = true;
+        stageGapRef.current = Math.max(0, gapAbs);
+        if (typeof gid === "number") focusGroupRef.current = gid;
 
-        // 5) Scroll to the FIRST panel in the target group
+        // 4) Travel to the first (or center) panel *with gaps already open*
+        //    If you prefer center of the group, compute it like:
+        //    const mid = Math.round((s + e) / 2);
+        //    centerOn(mid);
         centerOn(s);
+
+        // Optional: tiny lock to avoid a couple frames of jitter
+        navLockRef.current = 2;
       },
       clearStage,
     };
@@ -1272,14 +1358,14 @@ function LocalZScroller({
 
   useFrame((state, dt) => {
     const raw = scroll.offset;
-  
+
     // 1) Normalize to [0,1] in your window
     let p = THREE.MathUtils.clamp(
       (raw - start) / Math.max(1e-6, end - start),
       0,
       1
     );
-  
+
     // Optional physical end detection
     const el = (scroll as any).el as HTMLElement | undefined;
     if (el) {
@@ -1289,46 +1375,46 @@ function LocalZScroller({
       if (atTop) p = 0;
       if (atBottom) p = 1;
     }
-  
+
     const snap = (snapEndThreshold ?? 0.995);
     if (p > snap) p = 1;
     else if (p < (1 - snap)) p = 0;
-  
-    // 2) Map to local Z target
-    const zTarget = THREE.MathUtils.lerp(0, autoDistance, p);
-  
+
+    const { zTop, zBottom } = getZSpan();
+
+    // map scroll p∈[0..1] to z∈[zTop..zBottom]
+    const zTarget = THREE.MathUtils.lerp(zTop, zBottom, p);
+
     // 3) HYBRID CONTROLLER (no p==0/1 snap for zSmoothed)
     const oneGap = (gap ?? 0.018);
-  
-    // Far threshold: when we're farther than this, use constant-speed catchup
-    const farThreshold = oneGap * 8.9;           // ~60% of one card spacing
-    const maxSpeed    = oneGap * 44;             // cards per second (try 12–18)
-    const maxStep     = maxSpeed * dt;           // per-frame step cap
 
-  
+    // Far threshold: when we're farther than this, use constant-speed catchup
+    const farThreshold = oneGap * CARD_FAR_THOLD;           // ~60% of one card spacing
+    const maxSpeed = oneGap * CARD_MAX_SPD;             // cards per second (try 12–18)
+    const maxStep = maxSpeed * dt;           // per-frame step cap
+
+
     const delta = zTarget - zSmoothed.current;
-  
+
     if (Math.abs(delta) > farThreshold) {
       // FAR: constant-speed catchup (predictable, no “laggy” feel)
       const step = Math.sign(delta) * maxStep;
       zSmoothed.current += Math.abs(delta) > Math.abs(step) ? step : delta;
     } else {
-      // NEAR: exponential ease-out (natural slowdown)
-      const tau   = 0.1;                        // your chosen snappiness
-      const alpha = 1 - Math.exp(-dt / Math.max(1e-4, tau));
+      const alpha = 1 - Math.exp(-dt / Math.max(1e-4, TAU));
       zSmoothed.current += delta * alpha;
     }
-  
+
     // Numeric snap only (finish tiny remainder cleanly)
     const eps = Math.max(1e-4, oneGap * 0.0001);
     if (Math.abs(zTarget - zSmoothed.current) < eps) {
       zSmoothed.current = zTarget;
     }
-  
-    zRef.current = zTarget;
-  
+
+    zRef.current = zSmoothed.current;
+
     // 4) ---- the rest stays like you had it ----
-  
+
     // Stage-after-arrive (single)
     if (
       pendingStageIndexRef.current !== null &&
@@ -1337,7 +1423,7 @@ function LocalZScroller({
       stageAt(centerIndexRef.current, pendingStageGapRef.current);
       pendingStageIndexRef.current = null;
     }
-  
+
     // Follow-range with fixed span
     if (
       stagedRangeStartRef.current !== null &&
@@ -1348,15 +1434,15 @@ function LocalZScroller({
       const center = centerIndexRef.current;
       const maxIdx = (planes ?? 1) - 1;
       const maxStart = Math.max(0, maxIdx - span);
-  
+
       let startFollow = Math.floor(center - span / 2);
       startFollow = Math.max(0, Math.min(maxStart, startFollow));
       const endFollow = startFollow + span;
-  
+
       stagedRangeStartRef.current = startFollow;
       stagedRangeEndRef.current = endFollow;
     }
-  
+
     // Stage the range once we arrive at its center
     if (pendingStageRangeRef.current) {
       const { start, end, gapAbs } = pendingStageRangeRef.current;
@@ -1372,54 +1458,59 @@ function LocalZScroller({
       stageAt(centerIndexRef.current, pendingStageGapRef.current);
       pendingStageIndexRef.current = null;
     }
-  
+
     // 5) Compute center index from **zSmoothed** (keeps lift and camera in sync)
     if (navLockRef.current > 0) {
       navLockRef.current -= 1;
     } else {
-      const idxFloatSmoothed = oneGap > 0 ? -zSmoothed.current / oneGap : 0;
-      let nearest = Math.round(idxFloatSmoothed);
-      nearest = Math.max(0, Math.min((planes ?? 1) - 1, nearest));
-  
-      // Hysteresis to avoid micro-flips
-      if (typeof planes === "number" && oneGap > 0) {
-        const prevCenter = (centerIndexRef as any).prev ?? 0;
-        let idxStable = nearest;
-        if (Math.abs(idxFloatSmoothed - prevCenter) < 0.35) {
-          idxStable = prevCenter;
+      const g = gap ?? 0;
+      const zOfIndex = (i: number) => {
+        let off = 0;
+        if (groupGapsActiveRef.current && (stageGapRef.current ?? 0) > 0) {
+          const map = groupIndexMapRef.current;
+          const gi = map ? map[i] : -1;
+          if (gi >= 0) {
+            const focusG = focusGroupRef.current ?? 0;
+            const delta = Math.max(0, (stageGapRef.current ?? 0) - g);
+            off = (gi - focusG) * delta;
+          }
         }
-        centerIndexRef.current = idxStable;
-        (centerIndexRef as any).prev = idxStable;
+        return -(i * g + off);
+      };
+
+      const maxIdx = Math.max(0, (planes ?? 1) - 1);
+      let nearest = 0, best = Infinity;
+      for (let i = 0; i <= maxIdx; i++) {
+        const d = Math.abs(zSmoothed.current - zOfIndex(i));
+        if (d < best) { best = d; nearest = i; }
       }
+
+      const prev = (centerIndexRef as any).prev ?? nearest;
+      const prevDist = Math.abs(zSmoothed.current - zOfIndex(prev));
+      if (prevDist < g * 0.35) nearest = prev;
+
+      centerIndexRef.current = nearest;
+      (centerIndexRef as any).prev = nearest;
     }
-  
+
     // 6) Apply transform once
     ref.current.position.set(0, 0, zSmoothed.current);
-  
-    // Open group gaps after we arrive
-    if (pendingGroupGapRef.current) {
-      const { s, gapAbs, gid } = pendingGroupGapRef.current;
-      if (centerIndexRef.current === s) {
-        groupGapsActiveRef.current = true;
-        stageGapRef.current = gapAbs;
-        if (typeof gid === "number") focusGroupRef.current = gid;
-        pendingGroupGapRef.current = null;
-      }
-    }
-  
+
+
+
     if (onCenterChange && centerIndexRef.current !== lastEmittedCenterRef.current) {
       lastEmittedCenterRef.current = centerIndexRef.current;
       onCenterChange(centerIndexRef.current);
     }
-  
+
     if (expandedSwitchLockRef.current > 0) expandedSwitchLockRef.current -= 1;
-  
+
     if (stagedIndexRef.current !== null && stageGapRef.current > 0) {
       if (stagedIndexRef.current !== centerIndexRef.current) {
         stagedIndexRef.current = centerIndexRef.current;
       }
     }
-  });  
+  });
 
   const contextValue = useMemo(
     () => ({
@@ -1558,3 +1649,10 @@ function makeBaseFrontMaterial() {
   });
   return m;
 }
+
+
+
+
+
+
+

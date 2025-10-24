@@ -1,44 +1,24 @@
 BUGS:
 > if you hit the next/prev keys too fast they stay in the same image
 > if you hit the next/prev keys too fast you see a glimpse of the stack in the back
-> if you click second name, and scroll up, the end wont be in the middle
-> current scroll is stalling or something, getting stuck along the way
 
+"e" icon para el favicon
+flip scroll direction on mobile
+* add instagram icons i more info icon
+add initial loading screen with progression bar
+
+------
 
 X__add dot scrollbar to names, maybe use as drag?
 
 change to smaller image when in stack and bigger image when expanded
 swap images to actual images...
 
-add initial loading screen with progression bar
 * make intro of the unpacking
-
-"e" icon para el favicon
-
-flip scroll direction on mobile
 
 make tick ignore expand as well
 * add tick and names in the 3d itself
 
-
-
-
-* add instagram icons i more info icon
-
 * zoom in/zoom out the stack buttons? (zoomed out view with fewer ticks)
 
 get links de instagram
-
-
-
-
-
-/////
-
-fix that group thing where when it expands center goes off the frame
-
-make loading screen or intro screen
-
-add buttons for their socials and event info
-
-change images to better performing images and put in all of the images
