@@ -5,7 +5,6 @@ import {
   useCursor,
   ScrollControls,
   useScroll,
-  useTexture,
 } from "@react-three/drei";
 import * as THREE from "three";
 import "./AxonStack.css"
@@ -16,7 +15,7 @@ import { wireLoadingGate } from "../LoaderOverlay/LoadingGate";
 
 // ── DEBUG TEST KNOBS ─────────────────────────────────────────
 const TEST = {
-  PAGES_SCALE: 0.25,        // >1 = DOM scroll area bigger; <1 = smaller
+  PAGES_SCALE: 0.5,        // >1 = DOM scroll area bigger; <1 = smaller
   OVERSHOOT: 0,          // positive adds more scroll distance at both ends
   GAP_BASE_MULT: 1,      // scales your base card spacing GAP
   GROUP_GAP_OVERRIDE: -1 // -1 = use real stageGap; otherwise force a number (e.g. 0, 2, 8)
@@ -42,9 +41,13 @@ const EXPANDED_RENDER_ORDER = 1_000_000;
 const STAGE_GAP_WHEN_STAGED = 2;
 const STAGE_GAP_WHEN_EXPANDED = 10;
 const BACKDROP_FADE_SPD = 0.18;
-const CARD_Z_LERP = 0.2;
-const CARD_FAR_THOLD = 8.9;
-const CARD_MAX_SPD = 84;
+// const CARD_Z_LERP = 0.2;
+// const CARD_FAR_THOLD = 8.9;
+// const CARD_MAX_SPD = 84;
+
+const CARD_Z_LERP = 0.5;
+const CARD_FAR_THOLD = 2.3;
+const CARD_MAX_SPD = 34;
 const TAU = 0.2;
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -61,6 +64,78 @@ const VEC_NEG_Z = new THREE.Vector3(0, 0, -1);
 
 const SHARED_PLANE_GEOM = new THREE.PlaneGeometry(1, 1); // for card face & backdrop
 const SHARED_BOX_GEOM = new THREE.BoxGeometry(1, 1, 1);
+THREE.Cache.enabled = true;
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Windowed texture loader (lazy-load only near the center, dispose when far)
+// ────────────────────────────────────────────────────────────────────────────────
+function useManagedTexture(
+  src: string | undefined,
+  index: number,
+  onImageReady?: (img: HTMLImageElement) => void
+) {
+  const ctx = React.useContext(StackScrollContext);
+  const isMobile = useIsMobile(768);
+
+  // "How many cards around the center should have real textures?"
+  const WINDOW_AHEAD = isMobile ? 30 : 55;   // load ahead of center
+  const WINDOW_BEHIND = isMobile ? 30 : 55;   // load behind center
+
+  const loaderRef = React.useRef(new THREE.TextureLoader());
+  const loadingRef = React.useRef(false);
+  const [tex, setTex] = React.useState<THREE.Texture | null>(null);
+
+  // Load once when near; dispose when far.
+  useFrame(() => {
+    const center = ctx?.centerIndexRef?.current ?? 0;
+    const near =
+      index >= center - WINDOW_BEHIND && index <= center + WINDOW_AHEAD;
+
+    if (near) {
+      if (!tex && !loadingRef.current && src) {
+        loadingRef.current = true;
+        loaderRef.current.load(
+          src,
+          (t) => {
+            // sampling tuned for photos; no mipmaps to save memory
+            t.minFilter = THREE.LinearFilter;
+            t.magFilter = THREE.LinearFilter;
+            t.generateMipmaps = false;
+
+            // sRGB for correct color in newer/older three versions
+            setTextureSRGB(t);
+
+            // Report image size to the card (for cover/contain math)
+            const img = t.image as HTMLImageElement | undefined;
+            if (img && onImageReady) onImageReady(img);
+
+            setTex(t);
+            loadingRef.current = false;
+          },
+          undefined,
+          () => {
+            // onError
+            loadingRef.current = false;
+          }
+        );
+      }
+    } else {
+      if (tex) {
+        tex.dispose();                 // free GPU + system memory
+        setTex(null);
+      }
+    }
+  });
+
+  // Cleanup if card unmounts while texture is loaded
+  React.useEffect(() => {
+    return () => {
+      if (tex) tex.dispose();
+    };
+  }, [tex]);
+
+  return tex;
+}
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Context
@@ -167,8 +242,10 @@ export default function ClickableAxonStackDebug() {
     };
   }, []);
 
+  const TOTAL_IMAGES = 389;
+
   const IMAGES = useMemo<string[]>(
-    () => Array.from({ length: 60 }, (_, i) => `/stack-images/thumb/${String(i).padStart(3, "0")}.jpg`),
+    () => Array.from({ length: TOTAL_IMAGES }, (_, i) => `/stack-images/thumb/${String(i).padStart(3, "0")}.jpg`),
     []
   );
 
@@ -338,26 +415,26 @@ export default function ClickableAxonStackDebug() {
     (start: number, end: number) => {
       const go = () =>
         navApiRef.current?.goToGroupAndStage(start, end, STAGE_GAP_WHEN_STAGED);
-  
+
       // Desktop: go immediately
       if (!isMobile) {
         go();
         return;
       }
-  
+
       // Mobile: if the sheet is already closed, just go
       if (!namesOpen) {
         go();
         return;
       }
-  
+
       // Mobile: close the sheet, then wait for the transition to end
       const el = namesContainerRef.current;
       setNamesOpen(false);
-  
+
       if (el) {
         let fired = false;
-  
+
         const onEnd = (ev: TransitionEvent) => {
           // We only need it once; any property is fine (opacity/transform)
           if (fired) return;
@@ -365,9 +442,9 @@ export default function ClickableAxonStackDebug() {
           el.removeEventListener("transitionend", onEnd as any);
           go();
         };
-  
+
         el.addEventListener("transitionend", onEnd as any, { once: true });
-  
+
         // Safety fallback in case transitionend doesn’t fire
         setTimeout(() => {
           if (fired) return;
@@ -381,7 +458,7 @@ export default function ClickableAxonStackDebug() {
       }
     },
     [isMobile, namesOpen]
-  );  
+  );
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
@@ -706,47 +783,21 @@ function Card({
   const matRef = useRef<THREE.MeshBasicMaterial>(frontMat);
 
   // Texture
-  const tex = useTexture(src ?? FALLBACK_DATA_URL);
-  useEffect(() => setTextureSRGB(tex), [tex]);
+  // Managed / windowed texture loading
+  const onTexReady = React.useCallback((img: HTMLImageElement) => {
+    if (DEBUG) console.log("✅ texture loaded:", src, img.width, img.height);
+    imgSizeRef.current = { w: img.width || 0, h: img.height || 0 };
+  }, [src]);
 
-  useEffect(() => {
-    const img = tex.image as HTMLImageElement | undefined;
-    if (!img) return;
+  const tex = useManagedTexture(src ?? FALLBACK_DATA_URL, index, onTexReady);
 
-    const apply = () => {
-      if (DEBUG) console.log("✅ texture loaded:", src, img.width, img.height);
-      imgSizeRef.current = { w: img.width || 0, h: img.height || 0 };
-    };
-    const fail = () => {
-      if (DEBUG) console.error("❌ texture failed:", src);
-    };
-
-    // If the image is already available (cache), record immediately
-    if ((img as any).complete && img.width && img.height) {
-      apply();
-    }
-
-    img.addEventListener?.("load", apply as any);
-    img.addEventListener?.("error", fail as any);
-    return () => {
-      img.removeEventListener?.("load", apply as any);
-      img.removeEventListener?.("error", fail as any);
-    };
-  }, [tex, src]);
-
-
-  useEffect(() => {
+  React.useEffect(() => {
     if (!matRef.current) return;
-    matRef.current.map = tex ?? undefined; // tex from your loader
-    if (tex) {
-      // optional sampling tweaks; keep or remove depending on your needs
-      tex.minFilter = THREE.LinearFilter;
-      tex.magFilter = THREE.LinearFilter;
-      tex.generateMipmaps = false;
-      tex.needsUpdate = true;
-    }
+    // map must be Texture | null (not undefined)
+    matRef.current.map = tex ?? null;
     matRef.current.needsUpdate = true;
   }, [tex]);
+
 
   const baseZ = useMemo(() => index * gap, [index, gap]);
 
@@ -809,12 +860,16 @@ function Card({
       containFx = contain.fx;
       containFy = contain.fy;
 
-      tex.center.set(0.5, 0.5);
-      tex.wrapS = THREE.ClampToEdgeWrapping;
-      tex.wrapT = THREE.ClampToEdgeWrapping;
-      tex.repeat.set(repeatX, repeatY);
-      tex.offset.set(offsetX, offsetY);
-      // no need to set needsUpdate every frame
+      // Only mutate the texture when it exists
+      if (tex) {
+        tex.center.set(0.5, 0.5);
+        tex.wrapS = THREE.ClampToEdgeWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.repeat.set(repeatX, repeatY);
+        tex.offset.set(offsetX, offsetY);
+        // If you see stale UVs, uncomment next line:
+        // tex.needsUpdate = true;
+      }
     }
 
     if (waitingToStage && isCenter) {
