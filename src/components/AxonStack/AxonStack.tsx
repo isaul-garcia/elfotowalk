@@ -1989,9 +1989,9 @@ function useMotionTuning() {
   return isMobile
   ? { 
     // Mobile (snappier)
-    CARD_Z_LERP: 0.9, 
-    CARD_FAR_THOLD: 0.5, 
-    CARD_MAX_SPD: 58, 
+    CARD_Z_LERP: 0.5, 
+    CARD_FAR_THOLD: 2.3, 
+    CARD_MAX_SPD: 88, 
     TAU: 0.12 
   } : { 
       // Desktop (your current values)
