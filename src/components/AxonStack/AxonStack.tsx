@@ -11,6 +11,8 @@ import * as THREE from "three";
 import "./AxonStack.css"
 import fotowalkLogo from "../../assets/EF3_TYPE.png";
 import shortLogo from "../../assets/endmarks_short_logo.png";
+import LoaderOverlay from "../LoaderOverlay/LoaderOverlay";
+import { wireLoadingGate } from "../LoaderOverlay/LoadingGate";
 
 // ── DEBUG TEST KNOBS ─────────────────────────────────────────
 const TEST = {
@@ -43,7 +45,7 @@ const BACKDROP_FADE_SPD = 0.18;
 const CARD_Z_LERP = 0.2;
 const CARD_FAR_THOLD = 8.9;
 const CARD_MAX_SPD = 84;
-const TAU = 0.2;     
+const TAU = 0.2;
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Config / Debug
@@ -92,6 +94,7 @@ type StackNavApi = {
   goTo: (index: number, opts?: { animate?: boolean }) => void;
   goToAndStage: (index: number, gapAbs?: number) => void;
   goToRangeAndStage: (start: number, end: number, gapAbs?: number) => void; // NEW
+  goToGroupAndStage: (start: number, end: number, gapAbs?: number) => void;
   clearStage: () => void;
 };
 
@@ -116,6 +119,7 @@ function setTextureSRGB(tex: THREE.Texture) {
 // Main
 // ────────────────────────────────────────────────────────────────────────────────
 export default function ClickableAxonStackDebug() {
+  useEffect(() => { wireLoadingGate(); }, []);
   const isMobile = useIsMobile(768);
 
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
@@ -127,19 +131,95 @@ export default function ClickableAxonStackDebug() {
 
   const navApiRef = useRef<StackNavApi | null>(null);
 
+  const namesContainerRef = useRef<HTMLDivElement>(null);
+  const namesListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = namesListRef.current;
+    const host = namesContainerRef.current;
+    if (!el || !host) return;
+
+    const update = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const maxScroll = Math.max(1, scrollHeight - clientHeight);
+
+      // thumb size proportional to viewport vs content
+      const thumbH = (clientHeight / scrollHeight) * 100;
+      // top offset proportional to scrollTop within remaining track
+      const thumbTop = (scrollTop / maxScroll) * (100 - thumbH);
+
+      host.style.setProperty("--thumb-height", `${thumbH}%`);
+      host.style.setProperty("--thumb-top", `${thumbTop}%`);
+    };
+
+    // run once now
+    update();
+
+    // events
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+
+    return () => {
+      el.removeEventListener("scroll", update as any);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
   const IMAGES = useMemo<string[]>(
-    () => Array.from({ length: 82 }, (_, i) => `/stack-images/thumb/${String(i).padStart(3, "0")}.jpg`),
+    () => Array.from({ length: 388 }, (_, i) => `/stack-images/thumb/${String(i).padStart(3, "0")}.jpg`),
     []
   );
 
   // const GAP = 0.18;
   const GAP = 0.18 * TEST.GAP_BASE_MULT;
+
+  // Gap intro animation (0 → GAP after loader)
+  const [gapAnimT, setGapAnimT] = useState(0); // 0..1
+  const rafRef = useRef<number | null>(null);
+
+  const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
+  const ANIMATED_GAP = useMemo(
+    () => THREE.MathUtils.lerp(0.0001, GAP, easeOutCubic(gapAnimT)),
+    [gapAnimT, GAP]
+  );
+
+  const startGapIntro = useCallback((ms = 600) => {
+    // cancel any prior loop
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+
+    const t0 = performance.now();
+    const tick = () => {
+      const t = (performance.now() - t0) / ms;
+      if (t >= 1) {
+        setGapAnimT(1);
+        rafRef.current = null;
+        return;
+      }
+      setGapAnimT(t);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    setGapAnimT(0);
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  useEffect(() => () => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+  }, []);
+
+
+  useEffect(() => {
+    const onDone = () => startGapIntro(600);
+    window.addEventListener("loader:done", onDone);
+    return () => window.removeEventListener("loader:done", onDone);
+  }, [startGapIntro]);
+
   const planeCount = IMAGES.length;
 
   const ANCHORS = useMemo<Photographer[]>(() => {
     const safe = (i: number) => Math.max(0, Math.min(planeCount - 1, i));
     return [
-      { name: "Adrianna Figueroa", instagram: "adrianafigue", indices: [safe(0), safe(3)] },
+      // { name: "Adrianna Figueroa", instagram: "adrianafigue", indices: [safe(0), safe(3)] },
+      { name: "Adrianna Figueroa", indices: [safe(0), safe(3)] },
       { name: "Adriel Ildefonso", indices: [safe(4), safe(7)] },
       { name: "Alex Lopez", indices: [safe(8), safe(17)] },
       { name: "Alondra Ramos", indices: [safe(18), safe(29)] },
@@ -150,44 +230,43 @@ export default function ClickableAxonStackDebug() {
       { name: "Carlos-René Ramírez", indices: [safe(59), safe(61)] },
       { name: "Carolina Robles", indices: [safe(62), safe(69)] },
       { name: "Christian Soto", indices: [safe(70), safe(76)] },
-      { name: "David Rodríguez", indices: [safe(77), safe(81)] },
-      { name: "Erika Pérez", indices: [safe(82), safe(90)] },
-
-      // { name: `Gabriel "Saga" Saldaña`, indices: [safe(48), safe(58)] },
-      // { name: "Gabriel Morales", indices: [safe(48), safe(58)] },
-      // { name: "gabriel soria flecha", indices: [safe(48), safe(58)] },
-      // { name: "giancarlos merced", indices: [safe(48), safe(58)] },
-      // { name: "giuliana conty", indices: [safe(48), safe(58)] },
-      // { name: "irene montes", indices: [safe(48), safe(58)] },
-      // { name: "ivan valdes", indices: [safe(48), safe(58)] },
-      // { name: "jaime castillo", indices: [safe(48), safe(58)] },
-      // { name: "jason josel riopedre cuevas", indices: [safe(48), safe(58)] },
-      // { name: "javier pagán", indices: [safe(48), safe(58)] },
-      //
-      // { name: "jean martínez", indices: [safe(48), safe(58)] },
-      // { name: "john velez", indices: [safe(48), safe(58)] },
-      // { name: "jorge echevarría", indices: [safe(48), safe(58)] },
-      // { name: "josé gonzález", indices: [safe(48), safe(58)] },
-      // { name: "juan diego lastra", indices: [safe(48), safe(58)] },
-      // { name: "kevin padilla", indices: [safe(48), safe(58)] },
-      // { name: "leida nazario", indices: [safe(48), safe(58)] },
-      // { name: "malia ramos", indices: [safe(48), safe(58)] },
-      // { name: "maricely galvan", indices: [safe(48), safe(58)] },
-      // { name: "moises sierra", indices: [safe(48), safe(58)] },
-      // { name: "nahiara alicea", indices: [safe(48), safe(58)] },
-      // { name: "natasha colón", indices: [safe(48), safe(58)] },
-      // { name: "rafael lopez", indices: [safe(48), safe(58)] },
-      // { name: "rafael ruiz", indices: [safe(48), safe(58)] },
-      // { name: "reynaldo rodriguez", indices: [safe(48), safe(58)] },
-      // { name: "richaliz diaz", indices: [safe(48), safe(58)] },
-      // { name: "robert torres", indices: [safe(48), safe(58)] },
-      // { name: "rodolfo barrios", indices: [safe(48), safe(58)] },
-      // { name: "rolando haddock", indices: [safe(48), safe(58)] },
-      // { name: "samantha ortiz", indices: [safe(48), safe(58)] },
-      // { name: "sergio lopez", indices: [safe(48), safe(58)] },
-      // { name: "sigfredo alexae vazquez", indices: [safe(48), safe(58)] },
-      // { name: "yetzel gonzález", indices: [safe(48), safe(58)] },
-      // { name: "zabdiel abreu sánchez", indices: [safe(48), safe(58)] },
+      { name: "David Rodríguez", indices: [safe(77), safe(83)] },
+      { name: "Erika Pérez", indices: [safe(84), safe(92)] },
+      { name: `Gabriel "Saga" Saldaña`, indices: [safe(93), safe(123)] },
+      { name: "Gabriel Morales", indices: [safe(124), safe(129)] },
+      { name: "gabriel soria flecha", indices: [safe(130), safe(134)] },
+      { name: "giancarlos merced", indices: [safe(135), safe(144)] },
+      { name: "giuliana conty", indices: [safe(145), safe(146)] },
+      { name: "irene montes", indices: [safe(147), safe(150)] },
+      { name: "ivan valdes", indices: [safe(151), safe(157)] },
+      { name: "jaime castillo", indices: [safe(158), safe(165)] },
+      { name: "jason josel riopedre cuevas", indices: [safe(166), safe(172)] },
+      { name: "javier pagán", indices: [safe(173), safe(184)] },
+      { name: "jean martínez", indices: [safe(185), safe(192)] },
+      { name: "john velez", indices: [safe(193), safe(204)] },
+      { name: "jorge echevarría", indices: [safe(205), safe(207)] },
+      { name: "josé gonzález", indices: [safe(208), safe(210)] },
+      { name: "juan diego lastra", indices: [safe(211), safe(227)] },
+      { name: "kevin padilla", indices: [safe(228), safe(229)] },
+      { name: "leida nazario", indices: [safe(230), safe(234)] },
+      { name: "lorenzo rodriguez", indices: [safe(235), safe(239)] },
+      { name: "malia ramos", indices: [safe(240), safe(250)] },
+      { name: "maricely galvan", indices: [safe(252), safe(259)] },
+      { name: "moises sierra", indices: [safe(260), safe(264)] },
+      { name: "nahiara alicea", indices: [safe(265), safe(267)] },
+      { name: "natasha colón", indices: [safe(268), safe(271)] },
+      { name: "rafael lopez", indices: [safe(272), safe(281)] },
+      { name: "rafael ruiz", indices: [safe(282), safe(285)] },
+      { name: "reynaldo rodriguez", indices: [safe(286), safe(290)] },
+      { name: "richaliz diaz", indices: [safe(291), safe(305)] },
+      { name: "robert torres", indices: [safe(306), safe(328)] },
+      { name: "rodolfo barrios", indices: [safe(329), safe(337)] },
+      { name: "rolando haddock", indices: [safe(338), safe(348)] },
+      { name: "samantha ortiz", indices: [safe(349), safe(362)] },
+      { name: "sergio lopez", indices: [safe(363), safe(372)] },
+      { name: "sigfredo alexae vazquez", indices: [safe(373), safe(377)] },
+      { name: "yetzel gonzález", indices: [safe(378), safe(383)] },
+      { name: "zabdiel abreu sánchez", indices: [safe(384), safe(388)] },
     ];
   }, [planeCount]);
 
@@ -250,9 +329,12 @@ export default function ClickableAxonStackDebug() {
     return null;
   }, [expandedIdx, GROUP_RANGES]);
 
-
+  const introActive = gapAnimT < 0.999;
+  const fired = useRef(false);
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
+    <LoaderOverlay onDone={() => { if (!fired.current) { fired.current = true; startGapIntro(600); }}} />
+
       <Canvas
         orthographic
         gl={{ antialias: true, alpha: true }}
@@ -288,7 +370,7 @@ export default function ClickableAxonStackDebug() {
           >
             <LocalZScroller
               planes={planeCount}
-              gap={GAP}
+              gap={ANIMATED_GAP}
               overshoot={TEST.OVERSHOOT}
               ease={0.12}
               clearStageExternalRef={clearStageRef}
@@ -303,11 +385,12 @@ export default function ClickableAxonStackDebug() {
               <AxonStack
                 images={IMAGES}
                 planes={planeCount}
-                gap={GAP}
+                gap={ANIMATED_GAP}
                 width={1.6}
                 height={1}
-                lift={-0.25}
-                liftSpeed={0.15}
+                lift={introActive ? 0 : -0.25}
+                liftSpeed={introActive ? 0 : 0.15}
+                groupRanges={GROUP_RANGES}
               />
             </LocalZScroller>
           </group>
@@ -318,10 +401,11 @@ export default function ClickableAxonStackDebug() {
 
       {/* NAMES LIST */}
       <div
+        ref={namesContainerRef}
         aria-hidden={expandedIdx !== null}
         className={`axon-names ${expandedIdx !== null ? "is-hidden" : ""}`}
       >
-        <div className="axon-names__list">
+        <div ref={namesListRef} className="axon-names__list">
           {ANCHORS.map((a) => {
             const [start, end] = a.indices;
             const active = centeredIdx >= start && centeredIdx <= end;
@@ -330,7 +414,11 @@ export default function ClickableAxonStackDebug() {
                 key={a.name}
                 className={`axon-names__btn ${active ? "is-active" : ""}`}
                 onClick={() =>
-                  navApiRef.current?.goToRangeAndStage(start, end, STAGE_GAP_WHEN_STAGED)
+                  navApiRef.current?.goToGroupAndStage(
+                    start,
+                    end,
+                    STAGE_GAP_WHEN_STAGED
+                  )
                 }
                 title={`${a.name} (${start}–${end})`}
               >
@@ -340,6 +428,7 @@ export default function ClickableAxonStackDebug() {
           })}
         </div>
       </div>
+
 
       {/* CITY + DATE (top-left) */}
       {!isMobile && (
@@ -430,6 +519,7 @@ function AxonStack({
   tickLength = 0.14,      // visual length of the line
   tickThickness = 0.006,  // line thickness
   tickSide = "right" as "left" | "right", // which side of the card
+  groupRanges,
 }: {
   images?: string[];
   planes?: number;
@@ -443,8 +533,17 @@ function AxonStack({
   tickLength?: number;
   tickThickness?: number;
   tickSide?: "left" | "right";
+  groupRanges?: [number, number][];
+
 }) {
   const planeScale: [number, number] = [width, height];
+
+  const groupStartSet = React.useMemo(() => {
+    if (!groupRanges || groupRanges.length === 0) return null;
+    const s = new Set<number>();
+    for (const [start] of groupRanges) s.add(start);
+    return s;
+  }, [groupRanges]);
 
   return (
     <group position={[0, 0, 0]}>
@@ -458,7 +557,7 @@ function AxonStack({
           lift={lift}
           liftSpeed={liftSpeed}
           renderOrder={planes - i}
-          showTick={showTicksEvery > 0 && i % showTicksEvery === 0}
+          showTick={groupStartSet ? groupStartSet.has(i) : (showTicksEvery > 0 && i % showTicksEvery === 0)}
           tickSide={tickSide}
           tickOffset={tickOffset}
           tickLength={tickLength}
@@ -731,7 +830,7 @@ function Card({
     // fade out when not expanded
     if (backdropRef.current && backdropMatRef.current) {
       const mat = backdropMatRef.current;
-    
+
       // if we JUST lost expansion because of a switch, keep the white plate up
       if (switchLock > 0 && lastExpanded === index) {
         backdropRef.current.visible = true;
@@ -747,7 +846,7 @@ function Card({
         }
       }
     }
-    
+
 
     // Collapsed / staged behavior
     ref.current.position.x += (0 - ref.current.position.x) * CARD_RETURN_SPD;
@@ -781,8 +880,10 @@ function Card({
     const isStagedRange = (rangeStart !== null && rangeEnd !== null) ? (index >= rangeStart && index <= rangeEnd) : false;
     const isStaged = isStagedSingle || isStagedRange;
 
+    const allowCenterLiftInsideRange = isCenter && isStagedRange;
+
     const navLock = ctx?.navLockRef?.current ?? 0;
-    const shouldLift = !isStaged && (navLock > 0 ? isCenter : (hovered || isCenter));
+    const shouldLift = (allowCenterLiftInsideRange || !isStaged) && (navLock > 0 ? isCenter : (hovered || isCenter));
     const targetY = shouldLift ? lift : 0;
     ref.current.position.y += (targetY - ref.current.position.y) * liftSpeed;
 
@@ -828,40 +929,58 @@ function Card({
 
   const handleClick = useCallback(() => {
     const isCenter = (ctx?.centerIndexRef?.current ?? -1) === index;
-    const isStagedHere = (ctx?.stagedIndexRef?.current ?? null) === index;
+
+    const stagedIdx = ctx?.stagedIndexRef?.current ?? null;
+    const rangeStart = ctx?.stagedRangeStartRef?.current ?? null;
+    const rangeEnd = ctx?.stagedRangeEndRef?.current ?? null;
+
     const groupGapsOn = !!ctx?.groupGapsActiveRef?.current;
+    const inStagedRange =
+      rangeStart !== null && rangeEnd !== null && index >= rangeStart && index <= rangeEnd;
 
     if (expanded) {
       ctx?.setExpandedIndex?.(null);
       return;
     }
 
-    // If group gaps are active:
-    //  - 1st click (not centered) => center only (no single staging)
-    //  - 2nd click (centered)     => expand
+    // If any group gaps mode is on: click-to-center, then click-to-expand
+    // (unchanged behavior)
     if (groupGapsOn) {
       if (!isCenter) {
         ctx?.centerOn?.(index);
-        setWaitingToStage(false);   // don't arm single-stage
+        setWaitingToStage(false);
         return;
       }
-      // Already centered under group-gaps -> expand
       ctx?.setExpandedIndex?.(index);
       return;
     }
 
-    // Group gaps OFF → legacy single-stage behavior.
+    // --- Group gaps OFF (legacy path), but we might have a RANGE staged ---
+
+    // If we're not centered yet: center (no single-stage arming)
     if (!isCenter) {
       ctx?.centerOn?.(index);
-      setWaitingToStage(true);      // will stage when it becomes center
+      setWaitingToStage(false);
       return;
     }
-    if (!isStagedHere) {
+
+    // ✅ NEW: already inside a staged RANGE → expand immediately (single click)
+    if (inStagedRange) {
+      ctx?.setExpandedIndex?.(index);
+      return;
+    }
+
+    // If there’s no range staging and not single-staged yet → single-stage
+    const isSingleStagedHere = stagedIdx === index;
+    if (!isSingleStagedHere && rangeStart === null && rangeEnd === null) {
       ctx?.stageAt?.(index, 2);
       return;
     }
+
+    // Otherwise expand
     ctx?.setExpandedIndex?.(index);
-  }, [ctx, expanded, index]);
+  }, [ctx, expanded, index, setWaitingToStage]);
+
 
   return (
     <group ref={ref} position={[0, 0, baseZ]} renderOrder={renderOrder}>
@@ -1004,6 +1123,9 @@ function LocalZScroller({
 }) {
   const ref = useRef<THREE.Group>(null!);
   const scroll = useScroll();
+  const isMobile = useIsMobile(768);
+  const followRangeRef = useRef<boolean>(false);
+  const RANGE_EXIT_HYST = 0;
 
   const zRef = useRef(0);
   const centerIndexRef = useRef(0);
@@ -1063,8 +1185,13 @@ function LocalZScroller({
   }, [gap, planes, stageOffsetForIndex]);
 
   // pending “stage-after-arrive” for ranges
-  const pendingStageRangeRef = useRef<{ start: number; end: number; gapAbs: number } | null>(null);
-  const pendingGroupGapRef = useRef<{ s: number; e: number; gapAbs: number; gid: number } | null>(null);
+  const pendingStageRangeRef = useRef<{
+    start: number;
+    end: number;
+    gapAbs: number;
+    triggerAt: number;
+    follow?: boolean; // NEW (default false)
+  } | null>(null);
 
   const groupIndexMap = useMemo(() => {
     if (!groupRanges || !planes) return null;
@@ -1099,8 +1226,7 @@ function LocalZScroller({
       const targetZ = -(i * g + stageOffsetForIndex(i));
 
       // map to DOM scroll using the **actual** z span
-      const { zTop, zBottom, span } = getZSpan();
-      const spanLen = Math.abs(span) > 1e-9 ? span : -1; // guard
+      const { zTop, zBottom } = getZSpan();
       const pLocal = THREE.MathUtils.clamp((targetZ - zTop) / (zBottom - zTop), 0, 1);
       const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
 
@@ -1112,7 +1238,7 @@ function LocalZScroller({
     [planes, gap, start, end, scroll, stageOffsetForIndex, getZSpan]
   );
 
-  const stageRangeAt = useCallback((start: number, end: number, gapAbs: number) => {
+  const stageRangeAt = useCallback((start: number, end: number, gapAbs: number, follow = false) => {
     // clear single index mode
     stagedIndexRef.current = null;
 
@@ -1123,8 +1249,10 @@ function LocalZScroller({
 
     stagedRangeStartRef.current = s;
     stagedRangeEndRef.current = e;
-    stagedRangeSpanRef.current = e - s; // span length (e.g., 1 for two panels)
+    stagedRangeSpanRef.current = e - s;   // still useful for “follow” mode
     stageGapRef.current = Math.max(0, gapAbs);
+
+    followRangeRef.current = !!follow;    // NEW
   }, [planes]);
 
   const stageAt = useCallback((index: number, gapAbs: number) => {
@@ -1349,12 +1477,78 @@ function LocalZScroller({
         // Optional: tiny lock to avoid a couple frames of jitter
         navLockRef.current = 2;
       },
+      goToGroupAndStage: (start, end, gapAbs = 2) => {
+        clearStage(); // ensure clean state so lift works while traveling
+
+        const s = clampIndex(Math.min(start, end));
+        const e = clampIndex(Math.max(start, end));
+
+        pendingStageRangeRef.current = {
+          start: s,
+          end: e,
+          gapAbs: Math.max(0, gapAbs),
+          triggerAt: s,
+          follow: false, // FIXED group
+        };
+
+        centerOn(s);              // travel first (lift works here)
+        navLockRef.current = 2;
+      },
       clearStage,
     };
 
     navApiExternalRef.current = api;
     return () => { navApiExternalRef.current = null; };
   }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges]);
+
+  useEffect(() => {
+    const el = (scroll as any).el as HTMLElement | undefined;
+    if (!el || !isMobile) return;
+
+    // invert WHEEL
+    const onWheel = (e: WheelEvent) => {
+      // let your existing “expanded prevents scroll” logic run first:
+      if (expandedIndexRef.current != null) return;
+
+      e.preventDefault(); // we’ll drive scrollTop manually
+      el.scrollTop -= e.deltaY; // invert direction
+    };
+
+    // invert TOUCH
+    let lastY = 0;
+    let active = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (expandedIndexRef.current != null) return;
+      if (e.touches.length !== 1) return;
+      active = true;
+      lastY = e.touches[0].clientY;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!active || expandedIndexRef.current != null) return;
+      e.preventDefault();
+      const y = e.touches[0].clientY;
+      const dy = y - lastY;
+      lastY = y;
+      el.scrollTop -= dy; // invert: swipe down => go forward
+    };
+
+    const onTouchEnd = () => { active = false; };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      el.removeEventListener("wheel", onWheel as any);
+      el.removeEventListener("touchstart", onTouchStart as any);
+      el.removeEventListener("touchmove", onTouchMove as any);
+      el.removeEventListener("touchend", onTouchEnd as any);
+    };
+  }, [scroll, isMobile]);
+
 
   useFrame((state, dt) => {
     const raw = scroll.offset;
@@ -1426,6 +1620,7 @@ function LocalZScroller({
 
     // Follow-range with fixed span
     if (
+      followRangeRef.current &&
       stagedRangeStartRef.current !== null &&
       stagedRangeEndRef.current !== null &&
       stageGapRef.current > 0
@@ -1443,12 +1638,30 @@ function LocalZScroller({
       stagedRangeEndRef.current = endFollow;
     }
 
+    // Auto-collapse if we have a fixed staged group and center leaves its bounds
+    if (
+      !followRangeRef.current &&
+      stagedRangeStartRef.current !== null &&
+      stagedRangeEndRef.current !== null &&
+      stageGapRef.current > 0
+    ) {
+      const s = stagedRangeStartRef.current;
+      const e = stagedRangeEndRef.current;
+      const c = centerIndexRef.current;
+      const outside = (c < s - RANGE_EXIT_HYST) || (c > e + RANGE_EXIT_HYST);
+
+      if (outside) {
+        clearStage();            // back to no gaps
+        navLockRef.current = 2;  // small jitter guard
+      }
+    }
+
+
     // Stage the range once we arrive at its center
     if (pendingStageRangeRef.current) {
-      const { start, end, gapAbs } = pendingStageRangeRef.current;
-      const targetCenter = Math.round((start + end) / 2);
-      if (centerIndexRef.current === targetCenter) {
-        stageRangeAt(start, end, gapAbs);
+      const { start, end, gapAbs, triggerAt, follow = false } = pendingStageRangeRef.current;
+      if (centerIndexRef.current === triggerAt) {
+        stageRangeAt(start, end, gapAbs, follow); // pass follow
         pendingStageRangeRef.current = null;
       }
     } else if (
@@ -1511,6 +1724,8 @@ function LocalZScroller({
       }
     }
   });
+
+
 
   const contextValue = useMemo(
     () => ({
@@ -1649,10 +1864,3 @@ function makeBaseFrontMaterial() {
   });
   return m;
 }
-
-
-
-
-
-
-

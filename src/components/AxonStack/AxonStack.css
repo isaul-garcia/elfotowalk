@@ -24,7 +24,7 @@ span, a, div, h1, h2, h3 {
   width: 280px;
   margin-right: -15px;
 
-  overflow-y: auto;
+  /* overflow-y: auto; */
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 
@@ -34,7 +34,36 @@ span, a, div, h1, h2, h3 {
     transform 180ms ease,
     filter 180ms ease;
   will-change: opacity, transform, filter;
+  overflow: visible; /* <-- change from auto */
+  --thumb-top: 0%;
+  --thumb-height: 20%;
 }
+.axon-names::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 100%;
+  background: rgb(108 108 108 / 12%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* thumb (black), moves with CSS vars */
+.axon-names::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  width: 2px;
+  height: var(--thumb-height);
+  top: var(--thumb-top);
+  background: #bcbcbc;
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+
 
 .axon-names.is-hidden {
   opacity: 0;
@@ -53,24 +82,13 @@ span, a, div, h1, h2, h3 {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 
-  scrollbar-width: thin;
-  scrollbar-color: #888 transparent;
-  -ms-overflow-style: auto;
+  /* hide scrollbar everywhere */
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/old Edge */
+  position: relative;           /* create a stacking context for safety */
 }
-
-/* Chrome/Edge/Safari (WebKit) custom scrollbar */
 .axon-names__list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.axon-names__list::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 20px;
-}
-
-.axon-names__list::-webkit-scrollbar-track {
-  background: transparent;
-  border-radius: 20px;
+  display: none;                /* Chrome/Edge/Safari */
 }
 
 
@@ -314,3 +332,18 @@ span, a, div, h1, h2, h3 {
   background: linear-gradient(90deg, #111, #777);
   transition: width 120ms linear;
 }
+
+/* example */
+.loading-overlay {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: #fff;
+  opacity: 1;
+  transition: opacity 400ms ease; /* needed for transitionend */
+  z-index: 9999;
+}
+.loading-overlay.is-done {
+  opacity: 0;
+  pointer-events: none;
+}
+.loading-gif { max-width: 120px; height: auto; }
