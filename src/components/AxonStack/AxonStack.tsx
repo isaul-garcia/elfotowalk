@@ -41,6 +41,7 @@ const EXPANDED_RENDER_ORDER = 1_000_000;
 const STAGE_GAP_WHEN_STAGED = 2;
 const STAGE_GAP_WHEN_EXPANDED = 10;
 const BACKDROP_FADE_SPD = 0.18;
+const TAP_STEP = 6;
 // ────────────────────────────────────────────────────────────────────────────────
 // Config / Debug
 // ────────────────────────────────────────────────────────────────────────────────
@@ -616,7 +617,7 @@ export default function ClickableAxonStackDebug() {
               <button
                 type="button"
                 className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.queueStep(-1); }}
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.queueStep(-TAP_STEP); }}
               >
                 ←
               </button>
@@ -624,11 +625,10 @@ export default function ClickableAxonStackDebug() {
               <button
                 type="button"
                 className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.queueStep(+1); }}
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.queueStep(+TAP_STEP); }}
               >
                 →
               </button>
-
             </div>
 
             <div className="axon-expanded__name">{expandedName.name}</div>{expandedInfo && (
@@ -1821,10 +1821,8 @@ function LocalZScroller({
     }
 
     {
-      const switching = (expandedSwitchLockRef.current ?? 0) > 0;
       const hasQueue = stepQueueRef.current !== 0;
-
-      if (!switching && hasQueue) {
+      if (hasQueue) {
         const maxIdx = Math.max(0, (planes ?? 1) - 1);
         const current = centerIndexRef.current ?? 0;
 
@@ -1840,7 +1838,7 @@ function LocalZScroller({
 
         // switch expanded card cleanly
         if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
-        if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4; // small visual lock
+        if (expandedSwitchLockRef) expandedSwitchLockRef.current = 2; // small visual lock
         setExpandedIndex(next);
       }
     }
