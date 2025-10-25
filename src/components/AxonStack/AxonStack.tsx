@@ -41,7 +41,6 @@ const EXPANDED_RENDER_ORDER = 1_000_000;
 const STAGE_GAP_WHEN_STAGED = 2;
 const STAGE_GAP_WHEN_EXPANDED = 10;
 const BACKDROP_FADE_SPD = 0.18;
-const TAP_STEP = 6;
 // ────────────────────────────────────────────────────────────────────────────────
 // Config / Debug
 // ────────────────────────────────────────────────────────────────────────────────
@@ -166,7 +165,6 @@ type StackNavApi = {
   setAutoScroll: (velPxPerSec: number) => void; // positive = scroll down/forward
   stopAutoScroll: () => void;
   stepExpanded: (step: number) => void;
-  queueStep: (step: number) => void;
 };
 
 const StackScrollContext = React.createContext<StackCtx>(null);
@@ -615,20 +613,29 @@ export default function ClickableAxonStackDebug() {
           <div>
             <div className="axon-expanded__arrows">
               <button
-                type="button"
                 className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.queueStep(-TAP_STEP); }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  navApiRef.current?.stepExpanded(-1);
+                }}
+                aria-label="Previous"
               >
                 ←
               </button>
 
               <button
-                type="button"
                 className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.queueStep(+TAP_STEP); }}
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  navApiRef.current?.stepExpanded(+1);
+                }}
+                aria-label="Next"
               >
                 →
               </button>
+
             </div>
 
             <div className="axon-expanded__name">{expandedName.name}</div>{expandedInfo && (
@@ -1288,10 +1295,6 @@ function LocalZScroller({
 
   const lastEmittedCenterRef = useRef<number>(centerIndexRef.current ?? 0);
 
-  const stepQueueRef = useRef<number>(0);        // accumulate pending steps
-  const lastAppliedIndexRef = useRef<number>(0);
-
-
   const stageOffsetForIndex = useCallback((i: number) => {
     const g = gap ?? 0;
     const stageGap = stageGapRef.current ?? 0;
@@ -1516,6 +1519,7 @@ function LocalZScroller({
     }
   }, [setExpandedIndex]);
 
+  // current Z for index i with current group gaps
   const zOfIndexNow = useCallback((i: number) => {
     const g = gap ?? 0;
     let off = 0;
@@ -1531,22 +1535,23 @@ function LocalZScroller({
     return -(i * g + off);
   }, [gap]);
 
+  // hard snap internal state AND DOM scroll to a given index
   const snapToIndex = useCallback((i: number) => {
     if (!planes) return;
     const idx = Math.max(0, Math.min(planes - 1, i));
 
-    // 1) Snap the internal integrator & group transform
+    // 1) snap integrator + object position
     const z = zOfIndexNow(idx);
     zSmoothed.current = z;
     zRef.current = z;
     if (ref.current) ref.current.position.set(0, 0, z);
 
-    // 2) Lock center index immediately (bypass “stickiness”)
+    // 2) lock center index immediately (bypass stickiness)
     (centerIndexRef as any).prev = idx;
     centerIndexRef.current = idx;
-    navLockRef.current = 2; // few frames of jitter guard
+    navLockRef.current = 2;
 
-    // 3) Sync DOM scroll so ScrollControls mapping matches
+    // 3) sync ScrollControls’ DOM scroll mapping
     const el = (scroll as any).el as HTMLElement | undefined;
     if (el) {
       const { zTop, zBottom } = getZSpan();
@@ -1557,10 +1562,6 @@ function LocalZScroller({
     }
   }, [planes, zOfIndexNow, getZSpan, start, end, scroll]);
 
-  const queueStep = useCallback((step: number) => {
-    // allow queuing even while switching; we’ll apply when safe
-    stepQueueRef.current += step;
-  }, []);
 
   useEffect(() => {
     if (!clearStageExternalRef) return;
@@ -1680,28 +1681,28 @@ function LocalZScroller({
       setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
       stopAutoScroll: () => { autoVelRef.current = 0; },
       stepExpanded: (step) => {
+        // allow step only when expanded (change this if you want it active always)
+        if (expandedIndexRef.current == null) return;
+
         const maxIdx = Math.max(0, (planes ?? 1) - 1);
         const current = centerIndexRef.current ?? 0;
         const next = Math.max(0, Math.min(maxIdx, current + step));
 
-        // if you want to allow stepping even when not expanded, remove this guard:
-        if (expandedIndexRef.current == null) return;
-
-        // snap position/scroll instantly
         snapToIndex(next);
 
-        // switch the expanded card cleanly
+        // switch expanded card immediately and briefly lock rotation/scale snap
         if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
         if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
         setExpandedIndex(next);
       },
-      queueStep: (step) => queueStep(step),
+
       clearStage,
+
     };
 
     navApiExternalRef.current = api;
     return () => { navApiExternalRef.current = null; };
-  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, setExpandedIndex, snapToIndex, queueStep]);
+  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, setExpandedIndex,snapToIndex ]);
 
   useEffect(() => {
     const el = (scroll as any).el as HTMLElement | undefined;
@@ -1818,29 +1819,6 @@ function LocalZScroller({
     ) {
       stageAt(centerIndexRef.current, pendingStageGapRef.current);
       pendingStageIndexRef.current = null;
-    }
-
-    {
-      const hasQueue = stepQueueRef.current !== 0;
-      if (hasQueue) {
-        const maxIdx = Math.max(0, (planes ?? 1) - 1);
-        const current = centerIndexRef.current ?? 0;
-
-        // coalesce all queued steps into one target index
-        const requested = current + stepQueueRef.current;
-        stepQueueRef.current = 0; // reset queue
-
-        const next = Math.max(0, Math.min(maxIdx, requested));
-        lastAppliedIndexRef.current = next;
-
-        // hard snap everything to avoid jitter
-        snapToIndex(next);
-
-        // switch expanded card cleanly
-        if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
-        if (expandedSwitchLockRef) expandedSwitchLockRef.current = 2; // small visual lock
-        setExpandedIndex(next);
-      }
     }
 
     // Follow-range with fixed span
