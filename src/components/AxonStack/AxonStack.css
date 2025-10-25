@@ -223,6 +223,8 @@ h3 {
   border: none;
   cursor: pointer;
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
 .axon-expanded__name {
