@@ -1,10 +1,3 @@
-// ClickableAxonStackDebug (cleaned)
-// - Organized imports
-// - Removed unused imports and redundancies
-// - Centralized constants and helpers
-// - Wrapped debug logs with DEBUG guard
-// - Kept ALL behavior/animations/controls intact
-
 import React, { useMemo, useRef, useState, useContext, useEffect, useCallback } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
@@ -12,11 +5,47 @@ import {
   useCursor,
   ScrollControls,
   useScroll,
-  Stats,
   useTexture,
-  Html
 } from "@react-three/drei";
 import * as THREE from "three";
+import "./AxonStack.css"
+import fotowalkLogo from "../../assets/EF3_TYPE.png";
+import shortLogo from "../../assets/endmarks_short_logo.png";
+import LoaderOverlay from "../LoaderOverlay/LoaderOverlay";
+import { wireLoadingGate } from "../LoaderOverlay/LoadingGate";
+
+// ── DEBUG TEST KNOBS ─────────────────────────────────────────
+const TEST = {
+  PAGES_SCALE: 0.25,        // >1 = DOM scroll area bigger; <1 = smaller
+  OVERSHOOT: 0,          // positive adds more scroll distance at both ends
+  GAP_BASE_MULT: 1,      // scales your base card spacing GAP
+  GROUP_GAP_OVERRIDE: -1 // -1 = use real stageGap; otherwise force a number (e.g. 0, 2, 8)
+};
+
+// ── BEHAVIOR KNOBS ─────────────────────────────────────────
+const CARD_FRONT_SHIFT = 0;
+const CARD_PULL = 2.0;
+const CARD_ROTATE_SPD = 0.2;
+const CARD_MOVE_SPD = 0.18;
+const CARD_SCALE_SPD = 0.18;
+const CARD_RETURN_SPD = 0.18;
+const CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE = 4.25;
+const CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT = 3.75;
+const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.9;
+const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 4;
+const CARD_OFF_SCREEN_X = 1.0;
+const CARD_OFF_SCREEN_Y = -0.75;
+const CARD_CENTER_NUDGE_X = -1.0;
+const CARD_CENTER_NUDGE_Y = 0.6;
+const CARD_STAGE_GAP_ABS = 2;
+const EXPANDED_RENDER_ORDER = 1_000_000;
+const STAGE_GAP_WHEN_STAGED = 2;
+const STAGE_GAP_WHEN_EXPANDED = 10;
+const BACKDROP_FADE_SPD = 0.18;
+const CARD_Z_LERP = 0.2;
+const CARD_FAR_THOLD = 8.9;
+const CARD_MAX_SPD = 84;
+const TAU = 0.2;
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Config / Debug
@@ -29,6 +58,9 @@ const FALLBACK_DATA_URL =
 
 // Reusable constants
 const VEC_NEG_Z = new THREE.Vector3(0, 0, -1);
+
+const SHARED_PLANE_GEOM = new THREE.PlaneGeometry(1, 1); // for card face & backdrop
+const SHARED_BOX_GEOM = new THREE.BoxGeometry(1, 1, 1);
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Context
@@ -62,6 +94,7 @@ type StackNavApi = {
   goTo: (index: number, opts?: { animate?: boolean }) => void;
   goToAndStage: (index: number, gapAbs?: number) => void;
   goToRangeAndStage: (start: number, end: number, gapAbs?: number) => void; // NEW
+  goToGroupAndStage: (start: number, end: number, gapAbs?: number) => void;
   clearStage: () => void;
 };
 
@@ -86,7 +119,11 @@ function setTextureSRGB(tex: THREE.Texture) {
 // Main
 // ────────────────────────────────────────────────────────────────────────────────
 export default function ClickableAxonStackDebug() {
+  useEffect(() => { wireLoadingGate(); }, []);
+  const isMobile = useIsMobile(768);
+
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [centeredIdx, setCenteredIdx] = useState(0);
 
   const camRef = useRef<THREE.OrthographicCamera>(null!);
   const clearStageRef = useRef<(() => void) | null>(null);
@@ -94,31 +131,142 @@ export default function ClickableAxonStackDebug() {
 
   const navApiRef = useRef<StackNavApi | null>(null);
 
+  const namesContainerRef = useRef<HTMLDivElement>(null);
+  const namesListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = namesListRef.current;
+    const host = namesContainerRef.current;
+    if (!el || !host) return;
+
+    const update = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el;
+      const maxScroll = Math.max(1, scrollHeight - clientHeight);
+
+      // thumb size proportional to viewport vs content
+      const thumbH = (clientHeight / scrollHeight) * 100;
+      // top offset proportional to scrollTop within remaining track
+      const thumbTop = (scrollTop / maxScroll) * (100 - thumbH);
+
+      host.style.setProperty("--thumb-height", `${thumbH}%`);
+      host.style.setProperty("--thumb-top", `${thumbTop}%`);
+    };
+
+    // run once now
+    update();
+
+    // events
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+
+    return () => {
+      el.removeEventListener("scroll", update as any);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
+
   const IMAGES = useMemo<string[]>(
-    () => Array.from({ length: 52 }, (_, i) => `/stack-images/${String(i).padStart(3, "0")}.jpg`),
+    () => Array.from({ length: 388 }, (_, i) => `/stack-images/thumb/${String(i).padStart(3, "0")}.jpg`),
     []
   );
 
-  const GAP = 0.2;
-  const planeCount = IMAGES.length;
+  // const GAP = 0.18;
+  const GAP = 0.18 * TEST.GAP_BASE_MULT;
 
-  const depth = (planeCount - 1) * GAP;
-  const CAM_Y = Math.max(10, depth + 2);
-  const pages = Math.max(2, 1 + depth / 10);
+  // Gap intro animation (0 → GAP after loader)
+  const [gapAnimT, setGapAnimT] = useState(0); // 0..1
+  const rafRef = useRef<number | null>(null);
+
+  const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
+  const ANIMATED_GAP = useMemo(
+    () => THREE.MathUtils.lerp(0.0001, GAP, easeOutCubic(gapAnimT)),
+    [gapAnimT, GAP]
+  );
+
+  const startGapIntro = useCallback((ms = 600) => {
+    // cancel any prior loop
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+
+    const t0 = performance.now();
+    const tick = () => {
+      const t = (performance.now() - t0) / ms;
+      if (t >= 1) {
+        setGapAnimT(1);
+        rafRef.current = null;
+        return;
+      }
+      setGapAnimT(t);
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    setGapAnimT(0);
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  useEffect(() => () => {
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+  }, []);
+
 
   useEffect(() => {
-    if (!DEBUG) return;
-    console.log("Images list (first 5):", IMAGES.slice(0, 5), "total:", IMAGES.length);
-  }, [IMAGES]);
+    const onDone = () => startGapIntro(600);
+    window.addEventListener("loader:done", onDone);
+    return () => window.removeEventListener("loader:done", onDone);
+  }, [startGapIntro]);
 
-  const ANCHORS = useMemo(() => {
+  const planeCount = IMAGES.length;
+
+  const ANCHORS = useMemo<Photographer[]>(() => {
     const safe = (i: number) => Math.max(0, Math.min(planeCount - 1, i));
     return [
-      { name: "Isa", indices: [safe(0), safe(11)] },
-      { name: "Tom", indices: [safe(12), safe(22)] },
-      { name: "Pepo", indices: [safe(23), safe(30)] },
-      { name: "Dia", indices: [safe(31), safe(46)] },
-      { name: "Ule", indices: [safe(47), safe(51)] },
+      // { name: "Adrianna Figueroa", instagram: "adrianafigue", indices: [safe(0), safe(3)] },
+      { name: "Adrianna Figueroa", indices: [safe(0), safe(3)] },
+      { name: "Adriel Ildefonso", indices: [safe(4), safe(7)] },
+      { name: "Alex Lopez", indices: [safe(8), safe(17)] },
+      { name: "Alondra Ramos", indices: [safe(18), safe(29)] },
+      { name: "Ambar Yezabeth Cosme Pabon", indices: [safe(30), safe(31)] },
+      { name: "Andrea Pérez Molina", indices: [safe(32), safe(40)] },
+      { name: "Ariana González Palaez", indices: [safe(41), safe(47)] },
+      { name: "Aurelio Rodríguez", indices: [safe(48), safe(58)] },
+      { name: "Carlos-René Ramírez", indices: [safe(59), safe(61)] },
+      { name: "Carolina Robles", indices: [safe(62), safe(69)] },
+      { name: "Christian Soto", indices: [safe(70), safe(76)] },
+      { name: "David Rodríguez", indices: [safe(77), safe(83)] },
+      { name: "Erika Pérez", indices: [safe(84), safe(92)] },
+      { name: `Gabriel "Saga" Saldaña`, indices: [safe(93), safe(123)] },
+      { name: "Gabriel Morales", indices: [safe(124), safe(129)] },
+      { name: "gabriel soria flecha", indices: [safe(130), safe(134)] },
+      { name: "giancarlos merced", indices: [safe(135), safe(144)] },
+      { name: "giuliana conty", indices: [safe(145), safe(146)] },
+      { name: "irene montes", indices: [safe(147), safe(150)] },
+      { name: "ivan valdes", indices: [safe(151), safe(157)] },
+      { name: "jaime castillo", indices: [safe(158), safe(165)] },
+      { name: "jason josel riopedre cuevas", indices: [safe(166), safe(172)] },
+      { name: "javier pagán", indices: [safe(173), safe(184)] },
+      { name: "jean martínez", indices: [safe(185), safe(192)] },
+      { name: "john velez", indices: [safe(193), safe(204)] },
+      { name: "jorge echevarría", indices: [safe(205), safe(207)] },
+      { name: "josé gonzález", indices: [safe(208), safe(210)] },
+      { name: "juan diego lastra", indices: [safe(211), safe(227)] },
+      { name: "kevin padilla", indices: [safe(228), safe(229)] },
+      { name: "leida nazario", indices: [safe(230), safe(234)] },
+      { name: "lorenzo rodriguez", indices: [safe(235), safe(239)] },
+      { name: "malia ramos", indices: [safe(240), safe(250)] },
+      { name: "maricely galvan", indices: [safe(252), safe(259)] },
+      { name: "moises sierra", indices: [safe(260), safe(264)] },
+      { name: "nahiara alicea", indices: [safe(265), safe(267)] },
+      { name: "natasha colón", indices: [safe(268), safe(271)] },
+      { name: "rafael lopez", indices: [safe(272), safe(281)] },
+      { name: "rafael ruiz", indices: [safe(282), safe(285)] },
+      { name: "reynaldo rodriguez", indices: [safe(286), safe(290)] },
+      { name: "richaliz diaz", indices: [safe(291), safe(305)] },
+      { name: "robert torres", indices: [safe(306), safe(328)] },
+      { name: "rodolfo barrios", indices: [safe(329), safe(337)] },
+      { name: "rolando haddock", indices: [safe(338), safe(348)] },
+      { name: "samantha ortiz", indices: [safe(349), safe(362)] },
+      { name: "sergio lopez", indices: [safe(363), safe(372)] },
+      { name: "sigfredo alexae vazquez", indices: [safe(373), safe(377)] },
+      { name: "yetzel gonzález", indices: [safe(378), safe(383)] },
+      { name: "zabdiel abreu sánchez", indices: [safe(384), safe(388)] },
     ];
   }, [planeCount]);
 
@@ -131,21 +279,62 @@ export default function ClickableAxonStackDebug() {
 
   const GROUP_NAMES = useMemo<string[]>(() => ANCHORS.map(a => a.name), [ANCHORS]);
 
-  const expandedName = useMemo(() => {
+  const baseDepth = (planeCount - 1) * GAP;
+  const CAM_Y = Math.max(10, baseDepth + 2);
+  const groupsCount = GROUP_RANGES.length;
+  const extraPerBreakMax = Math.max(
+    0,
+    Math.max(STAGE_GAP_WHEN_STAGED, STAGE_GAP_WHEN_EXPANDED) - GAP
+  );
+  const extraDepthMax = Math.max(0, (groupsCount - 1) * extraPerBreakMax);
+  const effectiveDepthMax = baseDepth + extraDepthMax;
+
+  // const pages = Math.max(2, 1 + effectiveDepthMax / 10);
+  const pagesBase = Math.max(2, 1 + effectiveDepthMax / 10);
+  const pages = pagesBase * TEST.PAGES_SCALE;
+
+  useEffect(() => {
+    if (!DEBUG) return;
+    console.log("Images list (first 5):", IMAGES.slice(0, 5), "total:", IMAGES.length);
+  }, [IMAGES]);
+
+  type Photographer = { name: string; instagram?: string; indices: [number, number] };
+  const expandedName = useMemo<Photographer | null>(() => {
     if (expandedIdx == null) return null;
-    // find which group range contains the expanded index
     for (let gi = 0; gi < GROUP_RANGES.length; gi++) {
       const [s, e] = GROUP_RANGES[gi];
-      if (expandedIdx >= s && expandedIdx <= e) {
-        return ANCHORS[gi].name;
-      }
+      if (expandedIdx >= s && expandedIdx <= e) return ANCHORS[gi];
     }
     return null;
   }, [expandedIdx, GROUP_RANGES, ANCHORS]);
 
+  type ExpandedInfo = {
+    current: number;  // 1-based
+    total: number;
+    start: number;
+    end: number;
+  };
 
+  const expandedInfo = useMemo<ExpandedInfo | null>(() => {
+    if (expandedIdx == null) return null;
+
+    for (let gi = 0; gi < GROUP_RANGES.length; gi++) {
+      const [s, e] = GROUP_RANGES[gi]; // already ordered in your GROUP_RANGES
+      if (expandedIdx >= s && expandedIdx <= e) {
+        const total = e - s + 1;
+        const current = Math.min(Math.max(expandedIdx - s + 1, 1), total); // clamp, 1-based
+        return { current, total, start: s, end: e };
+      }
+    }
+    return null;
+  }, [expandedIdx, GROUP_RANGES]);
+
+  const introActive = gapAnimT < 0.999;
+  const fired = useRef(false);
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
+    <LoaderOverlay onDone={() => { if (!fired.current) { fired.current = true; startGapIntro(600); }}} />
+
       <Canvas
         orthographic
         gl={{ antialias: true, alpha: true }}
@@ -161,17 +350,17 @@ export default function ClickableAxonStackDebug() {
           position={[0, CAM_Y, 0]}
           near={0.001}
           far={5000}
-          zoom={180}
+          zoom={160}
           onUpdate={(c) => {
             c.lookAt(0, 0, 0);
             c.updateProjectionMatrix();
           }}
         />
 
-        <ambientLight intensity={0.8} />
+        <ambientLight intensity={0} />
         <directionalLight position={[5, 5, 5]} />
 
-        <ScrollControls pages={pages} damping={0.15}>
+        <ScrollControls pages={pages} damping={0}>
           <group
             rotation={[
               THREE.MathUtils.degToRad(120),
@@ -181,25 +370,27 @@ export default function ClickableAxonStackDebug() {
           >
             <LocalZScroller
               planes={planeCount}
-              gap={GAP}
-              overshoot={0.0}
-              ease={0.08}
+              gap={ANIMATED_GAP}
+              overshoot={TEST.OVERSHOOT}
+              ease={0.12}
               clearStageExternalRef={clearStageRef}
               collapseExpandedExternalRef={collapseExpandedRef}
               navApiExternalRef={navApiRef}
               groupRanges={GROUP_RANGES}
               groupNames={GROUP_NAMES}
               onExpandedChange={setExpandedIdx}
+              onCenterChange={setCenteredIdx}
             >
               <KeyboardNavigator planes={planeCount} />
               <AxonStack
                 images={IMAGES}
                 planes={planeCount}
-                gap={GAP}
+                gap={ANIMATED_GAP}
                 width={1.6}
                 height={1}
-                lift={-0.25}
-                liftSpeed={0.15}
+                lift={introActive ? 0 : -0.25}
+                liftSpeed={introActive ? 0 : 0.15}
+                groupRanges={GROUP_RANGES}
               />
             </LocalZScroller>
           </group>
@@ -207,60 +398,107 @@ export default function ClickableAxonStackDebug() {
 
         {/* {DEBUG && <Stats showPanel={0} className="r3f-stats" />} */}
       </Canvas>
+
+      {/* NAMES LIST */}
       <div
+        ref={namesContainerRef}
         aria-hidden={expandedIdx !== null}
-        style={{
-          opacity: expandedIdx !== null ? 0 : 1,
-          pointerEvents: expandedIdx !== null ? "none" : "auto",
-          transition: "opacity 150ms ease",
-          position: "absolute",
-          bottom: 22,
-          right: 22,
-          display: "flex",
-          flexDirection: "column",
-          textAlign: "right",
-          gap: 8,
-          zIndex: 10,
-          userSelect: "none",
-          fontFamily: "system-ui, sans-serif",
-          background: "rgba(255,255,255,0.85)",
-          padding: "14px 16px",
-        }}
+        className={`axon-names ${expandedIdx !== null ? "is-hidden" : ""}`}
       >
-        {ANCHORS.map((a) => {
-          const [start, end] = a.indices;
-          return (
-            <button
-              key={a.name}
-              onClick={() => navApiRef.current?.goToRangeAndStage(start, end, 1)}
-              style={{ cursor: "pointer", border: "none", textAlign: "right", padding: 0, backgroundColor: "#00000000", fontSize: "20px" }}
-              title={`${a.name} (${start}–${end})`}
-            >
-              {a.name}
-            </button>
-          );
-        })}
+        <div ref={namesListRef} className="axon-names__list">
+          {ANCHORS.map((a) => {
+            const [start, end] = a.indices;
+            const active = centeredIdx >= start && centeredIdx <= end;
+            return (
+              <button
+                key={a.name}
+                className={`axon-names__btn ${active ? "is-active" : ""}`}
+                onClick={() =>
+                  navApiRef.current?.goToGroupAndStage(
+                    start,
+                    end,
+                    STAGE_GAP_WHEN_STAGED
+                  )
+                }
+                title={`${a.name} (${start}–${end})`}
+              >
+                {a.name}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {expandedName && (
-        <div
-          style={{
-            padding: "4px 8px",
-            marginBottom: 6,
-            borderRadius: 8,
-            fontSize: 20,
-            fontWeight: 600,
-            letterSpacing: "0.3px",
-            color: "#000",
-            pointerEvents: "none",
-            position: "absolute",
-            top: 150,
-            left: 50
-          }}
-        >
-          {expandedName}
+
+      {/* CITY + DATE (top-left) */}
+      {!isMobile && (
+        <div className="axon-meta">
+          ponce, pr
+          <br />
+          <span className="axon-meta__date">21.06.2025</span>
         </div>
       )}
+
+      {/* TITLE (top-center) */}
+      <div className="axon-title">
+        <img src={fotowalkLogo} alt="Logo" />
+      </div>
+
+      {/* LOGO (bottom-center) */}
+      <div className="axon-logo">
+        <img src={shortLogo} alt="Logo" />
+      </div>
+
+      {/* EXPANDED OVERLAY */}
+      {expandedName && (
+        <div className="axon-expanded">
+          <div className="axon-expanded__arrows">
+            <button
+              className="axon-expanded__arrowBtn"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+              }}
+              aria-label="Previous"
+            >
+              ←
+            </button>
+            <button
+              className="axon-expanded__arrowBtn"
+              onClick={(e) => {
+                e.stopPropagation();
+                window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+              }}
+              aria-label="Next"
+            >
+              →
+            </button>
+          </div>
+
+          {expandedInfo && (
+            <div className="axon-expanded__count">
+              ({expandedInfo.current}/{expandedInfo.total})
+            </div>
+          )}
+
+          <div className="axon-expanded__name">{expandedName.name}</div>
+
+          {expandedName.instagram && (
+            <span className="axon-expanded__ig">
+              instagram:{" "}
+              <a
+                href={`https://instagram.com/${expandedName.instagram}`}
+                target="_blank"
+                rel="noreferrer"
+                title={`Open @${expandedName.instagram} on Instagram`}
+              >
+                @{expandedName.instagram}
+              </a>
+            </span>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
@@ -276,6 +514,12 @@ function AxonStack({
   height = 1,
   lift = 1,
   liftSpeed = 0.15,
+  showTicksEvery = 5,
+  tickOffset = 0.08,      // margin beyond card edge
+  tickLength = 0.14,      // visual length of the line
+  tickThickness = 0.006,  // line thickness
+  tickSide = "right" as "left" | "right", // which side of the card
+  groupRanges,
 }: {
   images?: string[];
   planes?: number;
@@ -284,8 +528,22 @@ function AxonStack({
   height?: number;
   lift?: number;
   liftSpeed?: number;
+  showTicksEvery?: number;
+  tickOffset?: number;
+  tickLength?: number;
+  tickThickness?: number;
+  tickSide?: "left" | "right";
+  groupRanges?: [number, number][];
+
 }) {
   const planeScale: [number, number] = [width, height];
+
+  const groupStartSet = React.useMemo(() => {
+    if (!groupRanges || groupRanges.length === 0) return null;
+    const s = new Set<number>();
+    for (const [start] of groupRanges) s.add(start);
+    return s;
+  }, [groupRanges]);
 
   return (
     <group position={[0, 0, 0]}>
@@ -299,6 +557,12 @@ function AxonStack({
           lift={lift}
           liftSpeed={liftSpeed}
           renderOrder={planes - i}
+          showTick={groupStartSet ? groupStartSet.has(i) : (showTicksEvery > 0 && i % showTicksEvery === 0)}
+          tickSide={tickSide}
+          tickOffset={tickOffset}
+          tickLength={tickLength}
+          tickThickness={tickThickness}
+          isLast={i === planes - 1}
         />
       ))}
     </group>
@@ -308,20 +572,6 @@ function AxonStack({
 // ────────────────────────────────────────────────────────────────────────────────
 // Card (single plane)
 // ────────────────────────────────────────────────────────────────────────────────
-// Behavior knobs (kept identical to original intent)
-const CARD_FRONT_SHIFT = 0;
-const CARD_PULL = 2.0;
-const CARD_ROTATE_SPD = 0.2;
-const CARD_MOVE_SPD = 0.18;
-const CARD_SCALE_EXPANDED = 4.6;
-const CARD_SCALE_SPD = 0.18;
-const CARD_OFF_SCREEN_X = 1.0;
-const CARD_OFF_SCREEN_Y = -0.6;
-const CARD_CENTER_NUDGE_X = -1.0;
-const CARD_CENTER_NUDGE_Y = 0.6;
-const CARD_RETURN_SPD = 0.18;
-const CARD_STAGE_GAP_ABS = 1;
-const EXPANDED_RENDER_ORDER = 1_000_000;
 
 function Card({
   src,
@@ -331,6 +581,12 @@ function Card({
   lift,
   liftSpeed,
   renderOrder,
+  showTick = false,
+  tickSide = "right",
+  tickOffset = 0.8,
+  tickLength = 0.14,
+  tickThickness = 0.006,
+  isLast = false
 }: {
   src?: string;
   index: number;
@@ -339,21 +595,36 @@ function Card({
   lift: number;
   liftSpeed: number;
   renderOrder: number;
+  showTick?: boolean;
+  tickSide?: "left" | "right";
+  tickOffset?: number;
+  tickLength?: number;
+  tickThickness?: number;
+  isLast?: boolean
 }) {
+  const isMobile = useIsMobile(768);
+
+  const lastTickLength = isLast ? tickLength : tickLength; // shorter at the end
+
   const ctx = useContext(StackScrollContext);
   const { camera } = useThree();
 
   const ref = useRef<THREE.Group>(null!);
   const meshRef = useRef<THREE.Mesh>(null!);
-  const matRef = useRef<THREE.MeshBasicMaterial>(null!);
   const imgSizeRef = useRef<{ w: number; h: number }>({ w: 0, h: 0 });
   const fitTRef = useRef(0); // 0 = cover, 1 = contain
   const FIT_SPD = 0.18;
+  const backdropRef = useRef<THREE.Mesh>(null!);
+  const backdropMatRef = useRef<THREE.MeshBasicMaterial>(null!);
+  const tickRef = useRef<THREE.Mesh>(null!);
 
   const [hovered, setHovered] = useState(false);
   const expanded = (ctx?.expandedIndexRef?.current ?? null) === index;
   const [waitingToStage, setWaitingToStage] = useState(false);
   useCursor(hovered);
+
+  const frontMat = React.useMemo(() => makeBaseFrontMaterial(), []);
+  const matRef = useRef<THREE.MeshBasicMaterial>(frontMat);
 
   // Texture
   const tex = useTexture(src ?? FALLBACK_DATA_URL);
@@ -384,6 +655,19 @@ function Card({
     };
   }, [tex, src]);
 
+
+  useEffect(() => {
+    if (!matRef.current) return;
+    matRef.current.map = tex ?? undefined; // tex from your loader
+    if (tex) {
+      // optional sampling tweaks; keep or remove depending on your needs
+      tex.minFilter = THREE.LinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.generateMipmaps = false;
+      tex.needsUpdate = true;
+    }
+    matRef.current.needsUpdate = true;
+  }, [tex]);
 
   const baseZ = useMemo(() => index * gap, [index, gap]);
 
@@ -422,9 +706,16 @@ function Card({
     }
 
     // Prepare texture mapping with current fitT
+    let containFx = 1, containFy = 1;
+
     const iw = imgSizeRef.current.w;
     const ih = imgSizeRef.current.h;
-    let containFx = 1, containFy = 1;
+    const planeIsPortrait = size[1] >= size[0];
+    const isPortrait = (iw > 0 && ih > 0) ? (ih >= iw) : planeIsPortrait;
+
+    const expandedBaseScale = isMobile
+      ? (isPortrait ? CARD_SCALE_EXPANDED_MOBILE_PORTRAIT : CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE)
+      : (isPortrait ? CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT : CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE);
 
     if (iw > 0 && ih > 0) {
       const cover = computeCoverParams(iw, ih, size[0], size[1]);
@@ -489,8 +780,8 @@ function Card({
       parent.worldToLocal(tmpLocal.copy(tmpWorld));
 
       const anisotropicTarget = new THREE.Vector3(
-        CARD_SCALE_EXPANDED * (iw > 0 ? THREE.MathUtils.lerp(1, containFx, fitTRef.current) : 1),
-        CARD_SCALE_EXPANDED * (iw > 0 ? THREE.MathUtils.lerp(1, containFy, fitTRef.current) : 1),
+        expandedBaseScale * (iw > 0 ? THREE.MathUtils.lerp(1, containFx, fitTRef.current) : 1),
+        expandedBaseScale * (iw > 0 ? THREE.MathUtils.lerp(1, containFy, fitTRef.current) : 1),
         1
       );
 
@@ -502,10 +793,10 @@ function Card({
         ref.current.scale.lerp(anisotropicTarget, CARD_SCALE_SPD);
       }
 
-      if (meshRef.current) meshRef.current.renderOrder = EXPANDED_RENDER_ORDER;
-      ref.current.renderOrder = EXPANDED_RENDER_ORDER;
+      if (meshRef.current) meshRef.current.renderOrder = EXPANDED_RENDER_ORDER + 1;
+      ref.current.renderOrder = EXPANDED_RENDER_ORDER + 1;
       if (matRef.current) {
-        matRef.current.transparent = false;
+        matRef.current.transparent = true;
         matRef.current.depthTest = false;
         matRef.current.depthWrite = false;
         matRef.current.depthFunc = THREE.AlwaysDepth;
@@ -514,8 +805,48 @@ function Card({
         matRef.current.polygonOffsetUnits = -4;
         matRef.current.opacity = 1;
       }
+
+      if (backdropRef.current && backdropMatRef.current && ref.current) {
+        const mat = backdropMatRef.current;
+        backdropRef.current.quaternion.copy(ref.current.quaternion);
+        backdropRef.current.position.copy(ref.current.position);
+        backdropRef.current.scale.set(200, 200, 1);
+        backdropRef.current.renderOrder = EXPANDED_RENDER_ORDER - 1;
+        backdropRef.current.visible = true;
+
+        // snap to full white during arrow switch to avoid glimpse
+        if (switchLock > 0) {
+          mat.opacity = 1;
+        } else {
+          const target = 1;
+          mat.opacity += (target - mat.opacity) * BACKDROP_FADE_SPD;
+          if (Math.abs(target - mat.opacity) < 1e-3) mat.opacity = target;
+        }
+      }
+
       return;
     }
+
+    // fade out when not expanded
+    if (backdropRef.current && backdropMatRef.current) {
+      const mat = backdropMatRef.current;
+
+      // if we JUST lost expansion because of a switch, keep the white plate up
+      if (switchLock > 0 && lastExpanded === index) {
+        backdropRef.current.visible = true;
+        mat.opacity = 1; // hold at full white during the switch
+      } else {
+        const target = 0;
+        mat.opacity += (target - mat.opacity) * BACKDROP_FADE_SPD;
+        if (Math.abs(mat.opacity - target) < 1e-3) {
+          mat.opacity = 0;
+          backdropRef.current.visible = false; // hide only once fully transparent
+        } else {
+          backdropRef.current.visible = true; // keep drawing during fade
+        }
+      }
+    }
+
 
     // Collapsed / staged behavior
     ref.current.position.x += (0 - ref.current.position.x) * CARD_RETURN_SPD;
@@ -549,8 +880,10 @@ function Card({
     const isStagedRange = (rangeStart !== null && rangeEnd !== null) ? (index >= rangeStart && index <= rangeEnd) : false;
     const isStaged = isStagedSingle || isStagedRange;
 
+    const allowCenterLiftInsideRange = isCenter && isStagedRange;
+
     const navLock = ctx?.navLockRef?.current ?? 0;
-    const shouldLift = !isStaged && (navLock > 0 ? isCenter : (hovered || isCenter));
+    const shouldLift = (allowCenterLiftInsideRange || !isStaged) && (navLock > 0 ? isCenter : (hovered || isCenter));
     const targetY = shouldLift ? lift : 0;
     ref.current.position.y += (targetY - ref.current.position.y) * liftSpeed;
 
@@ -560,7 +893,7 @@ function Card({
       ref.current.position.y = targetY;
       ref.current.position.z = targetZ;
     } else {
-      ref.current.position.z += (targetZ - ref.current.position.z) * 0.3;
+      ref.current.position.z += (targetZ - ref.current.position.z) * CARD_Z_LERP;
     }
 
     if (switchLock > 0 && lastExpanded === index) {
@@ -583,51 +916,108 @@ function Card({
       matRef.current.opacity = 1;
     }
 
-    // Stage persists; it will follow the center in LocalZScroller
+    if (tickRef.current) {
+      if (!expanded) {
+        // Parent (ref) is being lifted on Y; negate it on the child tick
+        tickRef.current.position.y = -ref.current.position.y;
+      } else {
+        // In expanded mode, let the tick follow normally
+        tickRef.current.position.y = 0;
+      }
+    }
   });
 
   const handleClick = useCallback(() => {
     const isCenter = (ctx?.centerIndexRef?.current ?? -1) === index;
-    const isStagedHere = (ctx?.stagedIndexRef?.current ?? null) === index;
+
+    const stagedIdx = ctx?.stagedIndexRef?.current ?? null;
+    const rangeStart = ctx?.stagedRangeStartRef?.current ?? null;
+    const rangeEnd = ctx?.stagedRangeEndRef?.current ?? null;
+
     const groupGapsOn = !!ctx?.groupGapsActiveRef?.current;
+    const inStagedRange =
+      rangeStart !== null && rangeEnd !== null && index >= rangeStart && index <= rangeEnd;
 
     if (expanded) {
       ctx?.setExpandedIndex?.(null);
       return;
     }
 
-    // If group gaps are active:
-    //  - 1st click (not centered) => center only (no single staging)
-    //  - 2nd click (centered)     => expand
+    // If any group gaps mode is on: click-to-center, then click-to-expand
+    // (unchanged behavior)
     if (groupGapsOn) {
       if (!isCenter) {
         ctx?.centerOn?.(index);
-        setWaitingToStage(false);   // don't arm single-stage
+        setWaitingToStage(false);
         return;
       }
-      // Already centered under group-gaps -> expand
       ctx?.setExpandedIndex?.(index);
       return;
     }
 
-    // Group gaps OFF → legacy single-stage behavior.
+    // --- Group gaps OFF (legacy path), but we might have a RANGE staged ---
+
+    // If we're not centered yet: center (no single-stage arming)
     if (!isCenter) {
       ctx?.centerOn?.(index);
-      setWaitingToStage(true);      // will stage when it becomes center
+      setWaitingToStage(false);
       return;
     }
-    if (!isStagedHere) {
-      ctx?.stageAt?.(index, 1);
+
+    // ✅ NEW: already inside a staged RANGE → expand immediately (single click)
+    if (inStagedRange) {
+      ctx?.setExpandedIndex?.(index);
       return;
     }
+
+    // If there’s no range staging and not single-staged yet → single-stage
+    const isSingleStagedHere = stagedIdx === index;
+    if (!isSingleStagedHere && rangeStart === null && rangeEnd === null) {
+      ctx?.stageAt?.(index, 2);
+      return;
+    }
+
+    // Otherwise expand
     ctx?.setExpandedIndex?.(index);
-  }, [ctx, expanded, index]);
+  }, [ctx, expanded, index, setWaitingToStage]);
+
 
   return (
     <group ref={ref} position={[0, 0, baseZ]} renderOrder={renderOrder}>
+
+      <mesh ref={backdropRef} visible={false} geometry={SHARED_PLANE_GEOM}>
+        <meshBasicMaterial
+          ref={backdropMatRef}
+          color="white"
+          transparent
+          opacity={0}
+          depthTest={false}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {showTick && (
+        <mesh
+          ref={tickRef}
+          geometry={SHARED_BOX_GEOM}
+          // horizontal bar: X = length, Y = thin, Z = thin
+          position={[
+            (tickSide === "right" ? +1 : -1) * (size[0] / 1.2 + tickOffset),
+            0,
+            -0.712,
+          ]}
+          scale={[lastTickLength, tickThickness, tickThickness]}
+        >
+          <meshBasicMaterial color="#adadad" toneMapped={false} />
+        </mesh>
+      )}
+
       <mesh
         ref={meshRef}
         rotation={[0, 0, Math.PI]}
+        scale={[-1, 1, 1]}
         onPointerOver={(e) => {
           e.stopPropagation();
           setHovered(true);
@@ -651,8 +1041,46 @@ function Card({
           side={THREE.DoubleSide}
         />
       </mesh>
+
     </group>
   );
+}
+
+// Compute cover cropping for a fixed plane (no squish)
+function computeCoverParams(
+  iw: number,
+  ih: number,
+  planeW: number,
+  planeH: number
+) {
+  const planeAR = planeW / planeH;
+  const imgAR = iw / ih;
+
+  if (imgAR > planeAR) {
+    // Image wider → crop left/right
+    const sx = planeAR / imgAR; // 0..1 of width to show
+    return { repeatX: sx, repeatY: 1, offsetX: (1 - sx) * 0.5, offsetY: 0 };
+  } else {
+    // Image taller → crop top/bottom
+    const sy = imgAR / planeAR; // 0..1 of height to show
+    return { repeatX: 1, repeatY: sy, offsetX: 0, offsetY: (1 - sy) * 0.5 };
+  }
+}
+
+// Given full-texture mapping (repeat=1,1), scale the plane so the image is not distorted (contain)
+function containScaleFactors(
+  iw: number,
+  ih: number,
+  planeW: number,
+  planeH: number
+) {
+  const planeAR = planeW / planeH;
+  const imgAR = iw / ih;
+  // We'll keep Y factor at 1 and scale X to match the image aspect
+  // so (W * fx) / (H * 1) = imgAR  => fx = imgAR / planeAR
+  const fx = imgAR / planeAR;
+  const fy = 1;
+  return { fx, fy };
 }
 
 // ────────────────────────────────────────────────────────────────────────────────
@@ -667,13 +1095,14 @@ function LocalZScroller({
   ease = 0.1,
   start = 0,
   end = 1,
-  snapEndThreshold = 0.995,
+  snapEndThreshold = 1.5,
   clearStageExternalRef,
   collapseExpandedExternalRef,
   navApiExternalRef,
   groupRanges,
   groupNames,
   onExpandedChange,
+  onCenterChange,
 }: {
   children: React.ReactNode;
   distance?: number;
@@ -690,22 +1119,17 @@ function LocalZScroller({
   groupRanges?: [number, number][];
   groupNames?: string[];
   onExpandedChange?: (idx: number | null) => void;
+  onCenterChange?: (idx: number) => void;
 }) {
   const ref = useRef<THREE.Group>(null!);
   const scroll = useScroll();
+  const isMobile = useIsMobile(768);
+  const followRangeRef = useRef<boolean>(false);
+  const RANGE_EXIT_HYST = 0;
 
   const zRef = useRef(0);
   const centerIndexRef = useRef(0);
   const zSmoothed = useRef(0);
-
-  const autoDistance = useMemo(() => {
-    if (typeof distance === "number") return distance;
-    if (typeof planes === "number" && typeof gap === "number") {
-      const depth = (planes - 1) * gap;
-      return -(depth + overshoot);
-    }
-    return 0;
-  }, [distance, planes, gap, overshoot]);
 
   const stagedIndexRef = useRef<number | null>(null);
   const stageGapRef = useRef<number>(0);
@@ -713,15 +1137,61 @@ function LocalZScroller({
   const expandedSwitchLockRef = useRef<number>(0);
   const navLockRef = useRef<number>(0);
 
-  const pendingStageIndexRef = useRef<number | null>(null);   // NEW
-  const pendingStageGapRef = useRef<number>(1);
+  const pendingStageIndexRef = useRef<number | null>(null);
+  const pendingStageGapRef = useRef<number>(2);
 
   const stagedRangeStartRef = useRef<number | null>(null);
   const stagedRangeEndRef = useRef<number | null>(null);
   const stagedRangeSpanRef = useRef<number>(0);
+  const prevStageGapRef = useRef<number>(0);
+
+  const prevGroupGapsActiveRef = useRef<boolean>(false);
+  const prevStagedIndexRef = useRef<number | null>(null);
+  const prevRangeStartRef = useRef<number | null>(null);
+  const prevRangeEndRef = useRef<number | null>(null);
+
+  const lastEmittedCenterRef = useRef<number>(centerIndexRef.current ?? 0);
+
+  const stageOffsetForIndex = useCallback((i: number) => {
+    const g = gap ?? 0;
+    const stageGap = stageGapRef.current ?? 0;
+    if (!(groupGapsActiveRef.current && stageGap > 0)) return 0;
+
+    const map = groupIndexMapRef.current;
+    const gi = map ? map[i] : -1;
+    if (gi < 0) return 0;
+
+    const focusG = focusGroupRef.current ?? 0;
+    const delta = Math.max(0, stageGap - g);
+    return (gi - focusG) * delta;
+  }, [gap]);
+
+  // Where the stack really starts/ends in Z right now
+  const getZSpan = useCallback(() => {
+    const g = gap ?? 0;
+    const maxIdx = Math.max(0, (planes ?? 1) - 1);
+
+    // stage offsets for first/last card with current group state
+    const offTop = stageOffsetForIndex(0);
+    const offBottom = stageOffsetForIndex(maxIdx);
+
+    const zTop = -(0 * g + offTop);
+    const zBottom = -(maxIdx * g + offBottom);
+
+    // NOTE: zBottom is typically < zTop (more negative)
+    const span = zBottom - zTop; // negative number; length = Math.abs(span)
+
+    return { zTop, zBottom, span };
+  }, [gap, planes, stageOffsetForIndex]);
 
   // pending “stage-after-arrive” for ranges
-  const pendingStageRangeRef = useRef<{ start: number; end: number; gapAbs: number } | null>(null);
+  const pendingStageRangeRef = useRef<{
+    start: number;
+    end: number;
+    gapAbs: number;
+    triggerAt: number;
+    follow?: boolean; // NEW (default false)
+  } | null>(null);
 
   const groupIndexMap = useMemo(() => {
     if (!groupRanges || !planes) return null;
@@ -748,21 +1218,27 @@ function LocalZScroller({
 
   const centerOn = useCallback(
     (index: number, opts?: { animate?: boolean }) => {
-      if (!planes || !gap) return;
+      if (!planes || gap == null) return;
       const i = Math.max(0, Math.min(planes - 1, index));
-      const targetZ = -(i * gap);
-      const pLocal = autoDistance !== 0 ? THREE.MathUtils.clamp(targetZ / autoDistance, 0, 1) : 0;
+
+      // target card Z with whatever gaps are active *right now*
+      const g = gap ?? 0;
+      const targetZ = -(i * g + stageOffsetForIndex(i));
+
+      // map to DOM scroll using the **actual** z span
+      const { zTop, zBottom } = getZSpan();
+      const pLocal = THREE.MathUtils.clamp((targetZ - zTop) / (zBottom - zTop), 0, 1);
       const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
 
       const el = (scroll as any).el as HTMLElement | undefined;
       if (!el) return;
       const max = Math.max(1, el.scrollHeight - el.clientHeight);
-      el.scrollTo({ top: pGlobal * max, behavior: (opts?.animate === false || navLockRef.current > 0) ? "auto" : "smooth" });
+      el.scrollTo({ top: pGlobal * max, behavior: "auto" });
     },
-    [planes, gap, autoDistance, start, end, scroll]
+    [planes, gap, start, end, scroll, stageOffsetForIndex, getZSpan]
   );
 
-  const stageRangeAt = useCallback((start: number, end: number, gapAbs: number) => {
+  const stageRangeAt = useCallback((start: number, end: number, gapAbs: number, follow = false) => {
     // clear single index mode
     stagedIndexRef.current = null;
 
@@ -773,8 +1249,10 @@ function LocalZScroller({
 
     stagedRangeStartRef.current = s;
     stagedRangeEndRef.current = e;
-    stagedRangeSpanRef.current = e - s; // span length (e.g., 1 for two panels)
+    stagedRangeSpanRef.current = e - s;   // still useful for “follow” mode
     stageGapRef.current = Math.max(0, gapAbs);
+
+    followRangeRef.current = !!follow;    // NEW
   }, [planes]);
 
   const stageAt = useCallback((index: number, gapAbs: number) => {
@@ -783,27 +1261,116 @@ function LocalZScroller({
   }, []);
 
   const clearStage = useCallback(() => {
-    // legacy single/range staging
+    // Keep whichever card is currently centered
+    const keepIndex = centerIndexRef.current ?? 0;
+
+    // Clear legacy single/range staging
     stagedIndexRef.current = null;
     stagedRangeStartRef.current = null;
     stagedRangeEndRef.current = null;
     stagedRangeSpanRef.current = 0;
+
+    // Turn off group gaps
+    const wasGroupGaps = !!groupGapsActiveRef.current;
+    groupGapsActiveRef.current = false;
     stageGapRef.current = 0;
 
-    // ALSO turn off group-gaps mode
-    if (typeof (groupGapsActiveRef?.current) === "boolean") {
-      groupGapsActiveRef.current = false;
+    if (wasGroupGaps) {
+      // Snap stack Z to where THIS same index lives with gaps closed
+      const g = gap ?? 0;
+      const zSnap = -(keepIndex * g);
+      zSmoothed.current = zSnap;   // snap the internal integrator
+      zRef.current = zSnap;
+      if (ref.current) ref.current.position.set(0, 0, zSnap);
+
+      // Sync DOM scroll to new mapping so camera/lift and index stay aligned
+      centerOn(keepIndex);
+      navLockRef.current = 2; // avoid jitter for a couple frames
     }
-  }, []);
+  }, [gap, centerOn]);
+
+
 
 
   const [expandedIndex, setExpandedIndexState] = useState<number | null>(null);
   const expandedIndexRef = useRef<number | null>(null);
   const setExpandedIndex = useCallback((idx: number | null) => {
+    const wasExpanded = expandedIndexRef.current != null; // read BEFORE we change it
+
     expandedIndexRef.current = idx;
     setExpandedIndexState(idx);
     onExpandedChange?.(idx);
-  }, [onExpandedChange]);
+
+    if (idx != null) {
+      // ENTERING expanded
+      if (!wasExpanded) {
+        // Snapshot ONCE (rising edge)
+        prevStageGapRef.current = stageGapRef.current;
+        prevGroupGapsActiveRef.current = !!groupGapsActiveRef.current;
+        prevStagedIndexRef.current = stagedIndexRef.current;
+        prevRangeStartRef.current = stagedRangeStartRef.current;
+        prevRangeEndRef.current = stagedRangeEndRef.current;
+
+        // Use the large gap only while expanded
+        stageGapRef.current = STAGE_GAP_WHEN_EXPANDED;
+      }
+      // If we were already expanded (switching images), DO NOT touch gap or snapshots.
+
+    } else {
+      // LEAVING expanded
+      if (wasExpanded) {
+        // Restore ONCE (falling edge)
+        const hadGroupGapsBefore = !!prevGroupGapsActiveRef.current;
+        const hadSingleBefore = prevStagedIndexRef.current !== null;
+        const hadRangeBefore = prevRangeStartRef.current !== null && prevRangeEndRef.current !== null;
+
+        if (hadGroupGapsBefore) {
+          // restore group gaps + original gap
+          groupGapsActiveRef.current = true;
+          stageGapRef.current = prevStageGapRef.current;
+
+          // clear any temp single/range staging created while expanded
+          stagedIndexRef.current = null;
+          stagedRangeStartRef.current = null;
+          stagedRangeEndRef.current = null;
+          stagedRangeSpanRef.current = 0;
+
+        } else if (hadSingleBefore || hadRangeBefore) {
+          // restore whichever staging existed before
+          groupGapsActiveRef.current = false;
+          stageGapRef.current = prevStageGapRef.current;
+
+          stagedIndexRef.current = hadSingleBefore ? prevStagedIndexRef.current : null;
+          if (hadRangeBefore) {
+            stagedRangeStartRef.current = prevRangeStartRef.current;
+            stagedRangeEndRef.current = prevRangeEndRef.current;
+            stagedRangeSpanRef.current = prevRangeEndRef.current! - prevRangeStartRef.current!;
+          } else {
+            stagedRangeStartRef.current = null;
+            stagedRangeEndRef.current = null;
+            stagedRangeSpanRef.current = 0;
+          }
+
+        } else {
+          // there was NO staging before expanding → clear any temp staging
+          groupGapsActiveRef.current = false;
+          stagedIndexRef.current = null;
+          stagedRangeStartRef.current = null;
+          stagedRangeEndRef.current = null;
+          stagedRangeSpanRef.current = 0;
+          stageGapRef.current = 0;
+        }
+
+        // defensive: clear any pending stage actions
+        pendingStageIndexRef.current = null;
+        pendingStageRangeRef.current = null;
+
+        const keepIndex = centerIndexRef.current ?? 0;
+        centerOn(keepIndex);
+        navLockRef.current = 2;
+      }
+    }
+  }, [onExpandedChange, centerOn]);
 
   const collapseExpanded = useCallback(() => {
     if (expandedIndexRef.current != null) {
@@ -875,34 +1442,57 @@ function LocalZScroller({
       goTo: (index, opts) => {
         centerOn(clampIndex(index), opts);
       },
-      goToAndStage: (index, gapAbs = 1) => {
+      goToAndStage: (index, gapAbs = 2) => {
         const i = clampIndex(index);
         pendingStageIndexRef.current = i;
         pendingStageGapRef.current = Math.max(0, gapAbs);
         centerOn(i); // smooth scroll; stage when centered
       },
-      goToRangeAndStage: (start, end, gapAbs = 1) => {
-        // clear any single/range staging visuals
+      goToRangeAndStage: (start, end, gapAbs = 2) => {
+        // 1) Clear any single/range staging visuals
         clearStage();
 
-        // turn ON group-gaps mode and set the gap size
-        if (groupGapsActiveRef) groupGapsActiveRef.current = true;
-        stageGapRef.current = Math.max(0, gapAbs);
-
-        // figure out the target group from [start..end]
+        // 2) Compute clamped start/end and target group id
         const s = Math.max(0, Math.min((planes ?? 1) - 1, Math.min(start, end)));
         const e = Math.max(0, Math.min((planes ?? 1) - 1, Math.max(start, end)));
 
-        // set focused group so its offset is 0
-        if (focusGroupRef && groupRanges) {
-          // exact match first; otherwise, find the group that contains s
-          let gid = groupRanges.findIndex(([gs, ge]) => gs === s && ge === e);
+        let gid = 0;
+        if (groupRanges) {
+          // exact match first; otherwise, group containing s
+          gid = groupRanges.findIndex(([gs, ge]) => gs === s && ge === e);
           if (gid < 0) gid = Math.max(0, groupRanges.findIndex(([gs, ge]) => s >= gs && s <= ge));
-          focusGroupRef.current = gid >= 0 ? gid : 0;
         }
 
-        // scroll to the FIRST panel in the group
+        // 3) OPEN THE GAPS NOW (before we move)
+        groupGapsActiveRef.current = true;
+        stageGapRef.current = Math.max(0, gapAbs);
+        if (typeof gid === "number") focusGroupRef.current = gid;
+
+        // 4) Travel to the first (or center) panel *with gaps already open*
+        //    If you prefer center of the group, compute it like:
+        //    const mid = Math.round((s + e) / 2);
+        //    centerOn(mid);
         centerOn(s);
+
+        // Optional: tiny lock to avoid a couple frames of jitter
+        navLockRef.current = 2;
+      },
+      goToGroupAndStage: (start, end, gapAbs = 2) => {
+        clearStage(); // ensure clean state so lift works while traveling
+
+        const s = clampIndex(Math.min(start, end));
+        const e = clampIndex(Math.max(start, end));
+
+        pendingStageRangeRef.current = {
+          start: s,
+          end: e,
+          gapAbs: Math.max(0, gapAbs),
+          triggerAt: s,
+          follow: false, // FIXED group
+        };
+
+        centerOn(s);              // travel first (lift works here)
+        navLockRef.current = 2;
       },
       clearStage,
     };
@@ -911,59 +1501,167 @@ function LocalZScroller({
     return () => { navApiExternalRef.current = null; };
   }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges]);
 
-  useFrame(() => {
+  useEffect(() => {
+    const el = (scroll as any).el as HTMLElement | undefined;
+    if (!el || !isMobile) return;
+
+    // invert WHEEL
+    const onWheel = (e: WheelEvent) => {
+      // let your existing “expanded prevents scroll” logic run first:
+      if (expandedIndexRef.current != null) return;
+
+      e.preventDefault(); // we’ll drive scrollTop manually
+      el.scrollTop -= e.deltaY; // invert direction
+    };
+
+    // invert TOUCH
+    let lastY = 0;
+    let active = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (expandedIndexRef.current != null) return;
+      if (e.touches.length !== 1) return;
+      active = true;
+      lastY = e.touches[0].clientY;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!active || expandedIndexRef.current != null) return;
+      e.preventDefault();
+      const y = e.touches[0].clientY;
+      const dy = y - lastY;
+      lastY = y;
+      el.scrollTop -= dy; // invert: swipe down => go forward
+    };
+
+    const onTouchEnd = () => { active = false; };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+
+    return () => {
+      el.removeEventListener("wheel", onWheel as any);
+      el.removeEventListener("touchstart", onTouchStart as any);
+      el.removeEventListener("touchmove", onTouchMove as any);
+      el.removeEventListener("touchend", onTouchEnd as any);
+    };
+  }, [scroll, isMobile]);
+
+
+  useFrame((state, dt) => {
     const raw = scroll.offset;
-    let p = THREE.MathUtils.clamp((raw - start) / Math.max(1e-6, end - start), 0, 1);
-    if (p > snapEndThreshold) p = 1;
 
-    const zTarget = THREE.MathUtils.lerp(0, autoDistance, p);
-    zRef.current = zTarget;
+    // 1) Normalize to [0,1] in your window
+    let p = THREE.MathUtils.clamp(
+      (raw - start) / Math.max(1e-6, end - start),
+      0,
+      1
+    );
 
-    // center index will be computed from zSmoothed below for stability
+    // Optional physical end detection
+    const el = (scroll as any).el as HTMLElement | undefined;
+    if (el) {
+      const max = Math.max(0, el.scrollHeight - el.clientHeight);
+      const atTop = el.scrollTop <= 1;
+      const atBottom = Math.abs(el.scrollTop - max) <= 1;
+      if (atTop) p = 0;
+      if (atBottom) p = 1;
+    }
 
-    zSmoothed.current += (zTarget - zSmoothed.current) * ease;
+    const snap = (snapEndThreshold ?? 0.995);
+    if (p > snap) p = 1;
+    else if (p < (1 - snap)) p = 0;
 
+    const { zTop, zBottom } = getZSpan();
+
+    // map scroll p∈[0..1] to z∈[zTop..zBottom]
+    const zTarget = THREE.MathUtils.lerp(zTop, zBottom, p);
+
+    // 3) HYBRID CONTROLLER (no p==0/1 snap for zSmoothed)
+    const oneGap = (gap ?? 0.018);
+
+    // Far threshold: when we're farther than this, use constant-speed catchup
+    const farThreshold = oneGap * CARD_FAR_THOLD;           // ~60% of one card spacing
+    const maxSpeed = oneGap * CARD_MAX_SPD;             // cards per second (try 12–18)
+    const maxStep = maxSpeed * dt;           // per-frame step cap
+
+
+    const delta = zTarget - zSmoothed.current;
+
+    if (Math.abs(delta) > farThreshold) {
+      // FAR: constant-speed catchup (predictable, no “laggy” feel)
+      const step = Math.sign(delta) * maxStep;
+      zSmoothed.current += Math.abs(delta) > Math.abs(step) ? step : delta;
+    } else {
+      const alpha = 1 - Math.exp(-dt / Math.max(1e-4, TAU));
+      zSmoothed.current += delta * alpha;
+    }
+
+    // Numeric snap only (finish tiny remainder cleanly)
+    const eps = Math.max(1e-4, oneGap * 0.0001);
+    if (Math.abs(zTarget - zSmoothed.current) < eps) {
+      zSmoothed.current = zTarget;
+    }
+
+    zRef.current = zSmoothed.current;
+
+    // 4) ---- the rest stays like you had it ----
+
+    // Stage-after-arrive (single)
     if (
       pendingStageIndexRef.current !== null &&
       centerIndexRef.current === pendingStageIndexRef.current
     ) {
       stageAt(centerIndexRef.current, pendingStageGapRef.current);
-      pendingStageIndexRef.current = null; // clear
+      pendingStageIndexRef.current = null;
     }
 
-    // follow-single (you already have this)
-    if (stagedIndexRef.current !== null && stageGapRef.current > 0) {
-      if (stagedIndexRef.current !== centerIndexRef.current) {
-        stagedIndexRef.current = centerIndexRef.current;
-      }
-    }
-
-    // NEW: follow-range with fixed span around the center
+    // Follow-range with fixed span
     if (
+      followRangeRef.current &&
       stagedRangeStartRef.current !== null &&
       stagedRangeEndRef.current !== null &&
       stageGapRef.current > 0
     ) {
-      const span = stagedRangeSpanRef.current; // e - s
+      const span = stagedRangeSpanRef.current;
       const center = centerIndexRef.current;
       const maxIdx = (planes ?? 1) - 1;
       const maxStart = Math.max(0, maxIdx - span);
 
-      // keep same span, center it on "center"
-      let start = Math.floor(center - span / 2);
-      start = Math.max(0, Math.min(maxStart, start));
-      const end = start + span;
+      let startFollow = Math.floor(center - span / 2);
+      startFollow = Math.max(0, Math.min(maxStart, startFollow));
+      const endFollow = startFollow + span;
 
-      stagedRangeStartRef.current = start;
-      stagedRangeEndRef.current = end;
+      stagedRangeStartRef.current = startFollow;
+      stagedRangeEndRef.current = endFollow;
     }
 
-    // stage the range once we arrive at its center
+    // Auto-collapse if we have a fixed staged group and center leaves its bounds
+    if (
+      !followRangeRef.current &&
+      stagedRangeStartRef.current !== null &&
+      stagedRangeEndRef.current !== null &&
+      stageGapRef.current > 0
+    ) {
+      const s = stagedRangeStartRef.current;
+      const e = stagedRangeEndRef.current;
+      const c = centerIndexRef.current;
+      const outside = (c < s - RANGE_EXIT_HYST) || (c > e + RANGE_EXIT_HYST);
+
+      if (outside) {
+        clearStage();            // back to no gaps
+        navLockRef.current = 2;  // small jitter guard
+      }
+    }
+
+
+    // Stage the range once we arrive at its center
     if (pendingStageRangeRef.current) {
-      const { start, end, gapAbs } = pendingStageRangeRef.current;
-      const targetCenter = Math.round((start + end) / 2);
-      if (centerIndexRef.current === targetCenter) {
-        stageRangeAt(start, end, gapAbs);
+      const { start, end, gapAbs, triggerAt, follow = false } = pendingStageRangeRef.current;
+      if (centerIndexRef.current === triggerAt) {
+        stageRangeAt(start, end, gapAbs, follow); // pass follow
         pendingStageRangeRef.current = null;
       }
     } else if (
@@ -974,39 +1672,60 @@ function LocalZScroller({
       pendingStageIndexRef.current = null;
     }
 
-
-    // Compute stable center index from the SMOOTHED z to avoid jitter
+    // 5) Compute center index from **zSmoothed** (keeps lift and camera in sync)
     if (navLockRef.current > 0) {
       navLockRef.current -= 1;
     } else {
-      const idxFloatSmoothed = gap && gap > 0 ? -zSmoothed.current / gap : 0;
-      let nearest = Math.round(idxFloatSmoothed);
-      nearest = Math.max(0, Math.min((planes ?? 1) - 1, nearest));
-
-      // Hysteresis: require ~0.35 index movement before switching center
-      if (typeof planes === "number" && typeof gap === "number" && gap > 0) {
-        const prevCenter = (centerIndexRef as any).prev ?? 0;
-        let idxStable = nearest;
-        if (Math.abs(idxFloatSmoothed - prevCenter) < 0.35) {
-          idxStable = prevCenter;
+      const g = gap ?? 0;
+      const zOfIndex = (i: number) => {
+        let off = 0;
+        if (groupGapsActiveRef.current && (stageGapRef.current ?? 0) > 0) {
+          const map = groupIndexMapRef.current;
+          const gi = map ? map[i] : -1;
+          if (gi >= 0) {
+            const focusG = focusGroupRef.current ?? 0;
+            const delta = Math.max(0, (stageGapRef.current ?? 0) - g);
+            off = (gi - focusG) * delta;
+          }
         }
-        centerIndexRef.current = idxStable;
-        (centerIndexRef as any).prev = idxStable;
+        return -(i * g + off);
+      };
+
+      const maxIdx = Math.max(0, (planes ?? 1) - 1);
+      let nearest = 0, best = Infinity;
+      for (let i = 0; i <= maxIdx; i++) {
+        const d = Math.abs(zSmoothed.current - zOfIndex(i));
+        if (d < best) { best = d; nearest = i; }
       }
+
+      const prev = (centerIndexRef as any).prev ?? nearest;
+      const prevDist = Math.abs(zSmoothed.current - zOfIndex(prev));
+      if (prevDist < g * 0.35) nearest = prev;
+
+      centerIndexRef.current = nearest;
+      (centerIndexRef as any).prev = nearest;
     }
 
+    // 6) Apply transform once
     ref.current.position.set(0, 0, zSmoothed.current);
 
-    // one-shot lock to skip expand/return lerps on keypress
+
+
+    if (onCenterChange && centerIndexRef.current !== lastEmittedCenterRef.current) {
+      lastEmittedCenterRef.current = centerIndexRef.current;
+      onCenterChange(centerIndexRef.current);
+    }
+
     if (expandedSwitchLockRef.current > 0) expandedSwitchLockRef.current -= 1;
 
-    // If a stage exists, make it follow the current center index
     if (stagedIndexRef.current !== null && stageGapRef.current > 0) {
       if (stagedIndexRef.current !== centerIndexRef.current) {
         stagedIndexRef.current = centerIndexRef.current;
       }
     }
   });
+
+
 
   const contextValue = useMemo(
     () => ({
@@ -1096,17 +1815,10 @@ function KeyboardNavigator({ planes }: { planes: number }) {
         }
 
         // Group gaps OFF → preserve legacy "expanded + single-stage" behavior
-        const gapAbs =
-          (ctx?.stageGapRef?.current ?? 0) > 0
-            ? (ctx?.stageGapRef!.current as number)
-            : 1;
-
-        if (ctx?.stagedIndexRef) ctx.stagedIndexRef.current = next;
         if (ctx?.centerIndexRef) {
           (ctx.centerIndexRef as any).prev = next;
           ctx.centerIndexRef.current = next;
         }
-        ctx?.stageAt?.(next, gapAbs);
         ctx?.centerOn?.(next);
         if (ctx?.lastExpandedIndexRef)
           ctx.lastExpandedIndexRef.current =
@@ -1125,39 +1837,30 @@ function KeyboardNavigator({ planes }: { planes: number }) {
   return null;
 }
 
-// Compute cover cropping for a fixed plane (no squish)
-function computeCoverParams(
-  iw: number,
-  ih: number,
-  planeW: number,
-  planeH: number
-) {
-  const planeAR = planeW / planeH;
-  const imgAR = iw / ih;
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = React.useState(false);
 
-  if (imgAR > planeAR) {
-    // Image wider → crop left/right
-    const sx = planeAR / imgAR; // 0..1 of width to show
-    return { repeatX: sx, repeatY: 1, offsetX: (1 - sx) * 0.5, offsetY: 0 };
-  } else {
-    // Image taller → crop top/bottom
-    const sy = imgAR / planeAR; // 0..1 of height to show
-    return { repeatX: 1, repeatY: sy, offsetX: 0, offsetY: (1 - sy) * 0.5 };
-  }
+  React.useEffect(() => {
+    const check = () => setIsMobile(typeof window !== "undefined" && window.innerWidth <= breakpoint);
+    check(); // initial
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, [breakpoint]);
+
+  return isMobile;
 }
 
-// Given full-texture mapping (repeat=1,1), scale the plane so the image is not distorted (contain)
-function containScaleFactors(
-  iw: number,
-  ih: number,
-  planeW: number,
-  planeH: number
-) {
-  const planeAR = planeW / planeH;
-  const imgAR = iw / ih;
-  // We'll keep Y factor at 1 and scale X to match the image aspect
-  // so (W * fx) / (H * 1) = imgAR  => fx = imgAR / planeAR
-  const fx = imgAR / planeAR;
-  const fy = 1;
-  return { fx, fy };
+// ────────────────────────────────────────────────────────────────────────────────
+// Base material (cheap to clone per card)
+// ────────────────────────────────────────────────────────────────────────────────
+function makeBaseFrontMaterial() {
+  const m = new THREE.MeshBasicMaterial({
+    toneMapped: false,
+    side: THREE.DoubleSide,
+    transparent: false,
+    depthTest: true,
+    depthWrite: true,
+    opacity: 1,
+  });
+  return m;
 }

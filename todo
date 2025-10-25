@@ -1,16 +1,19 @@
-BUGS:
-> if you hit the next/prev keys too fast they stay in the same image
-> there a small wobble effect on the expanded image when pressing next/prev keys
-> when expanded, stack shouldnt be clickable
 
-/////
+"e" icon para el favicon
+* add instagram icons i more info icon
 
-zoom in/zoom out the stack
+------
 
-add interface
-- for normal stack (el fotowalk 3 image/text, endmarks, names, info button)
-- for gapped (=)
-- for expanded (nombre, url instagram, titulo imagen, fecha, lugar)
-- progress dots of images and persons images when expanded?
+X__add dot scrollbar to names, maybe use as drag?
 
-make intro of the unpacking
+change to smaller image when in stack and bigger image when expanded
+swap images to actual images...
+
+* make intro of the unpacking
+
+make tick ignore expand as well
+* add tick and names in the 3d itself
+
+* zoom in/zoom out the stack buttons? (zoomed out view with fewer ticks)
+
+get links de instagram

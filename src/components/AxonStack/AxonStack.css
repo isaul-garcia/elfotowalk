@@ -1,0 +1,349 @@
+@import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap');
+
+span, a, div, h1, h2, h3 {
+  font-family: "Figtree", sans-serif;
+
+}
+
+/* Container: names list (bottom-right) */
+.axon-names {
+  position: absolute;
+  bottom: 40px;
+  right: 40px;
+  z-index: 10;
+
+  opacity: 1;
+  pointer-events: auto;
+
+  user-select: none;
+  font-family: "Figtree", sans-serif;
+
+  background: rgba(255, 255, 255, 0);
+
+  max-height: 40vh;
+  width: 280px;
+  margin-right: -15px;
+
+  /* overflow-y: auto; */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+
+  /* smooth fade/slide */
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    filter 180ms ease;
+  will-change: opacity, transform, filter;
+  overflow: visible; /* <-- change from auto */
+  --thumb-top: 0%;
+  --thumb-height: 20%;
+}
+.axon-names::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2px;
+  height: 100%;
+  background: rgb(108 108 108 / 12%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* thumb (black), moves with CSS vars */
+.axon-names::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  width: 2px;
+  height: var(--thumb-height);
+  top: var(--thumb-top);
+  background: #bcbcbc;
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+
+.axon-names.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.axon-names__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: right;
+  padding-right: 20px;
+
+  max-height: 40vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+
+  /* hide scrollbar everywhere */
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE/old Edge */
+  position: relative;           /* create a stacking context for safety */
+}
+.axon-names__list::-webkit-scrollbar {
+  display: none;                /* Chrome/Edge/Safari */
+}
+
+
+.axon-names__btn {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: right;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 400;
+  color: #888;
+  -webkit-font-smoothing: antialiased;
+  text-transform: lowercase;
+}
+.axon-names__btn:hover {
+  color: #000;
+}
+.axon-names__btn.is-active {
+  font-weight: 600;
+  color: #000;
+}
+
+/* Top-left: city/date block */
+.axon-meta {
+  position: absolute;
+  top: 40px;
+  left: 40px;
+
+  color: #000;
+  pointer-events: none;
+
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  font-size: 30px;
+}
+
+.axon-meta__date {
+  display: inline-block;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.3px;
+  color: #888;
+}
+
+/* Top-center: title */
+.axon-title {
+  position: absolute;
+  top: 40px;
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+  
+  color: #000;
+  pointer-events: none;
+  
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  font-size: 30px;
+}
+.axon-title > img {
+  width: 20vh;
+  margin-top: -16px;
+}
+
+/* Bottom-center: logo */
+.axon-logo {
+  position: absolute;
+  bottom: 5px;
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+
+  color: #000;
+  pointer-events: none;
+
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  font-size: 30px;
+}
+
+.axon-logo img {
+  width: 10vh;
+}
+
+/* Expanded overlay (bottom-right) */
+.axon-expanded {
+  position: absolute;
+  bottom: 150px;
+  right: 80px;
+
+  min-height: 20vh;
+  min-width: 30vh;
+
+  padding: 8px 10px;
+  border-radius: 8px;
+
+  background: rgba(255, 255, 255, 0.9);
+  color: #000;
+
+  pointer-events: auto;
+  user-select: text;
+}
+
+.axon-expanded__arrows {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.axon-expanded__arrowBtn {
+  font-size: 24px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.axon-expanded__name {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin: 6px 0 2px 0;
+}
+
+.axon-expanded__ig {
+  font-size: 14px;
+}
+
+.axon-expanded__ig a {
+  opacity: 0.8;
+  text-decoration: none;
+  margin-left: 2px; /* ensures space after "instagram:" */
+}
+
+/* Container: fixed on the right, vertically centered */
+.axon-fastbar {
+  position: fixed;
+  right: -90px;
+  top: 50%;
+  transform: translateY(-50%) rotate(90deg); /* rotate to make it vertical */
+  width: 220px;           /* visual length of the line after rotation */
+  pointer-events: auto;
+  z-index: 10;
+  opacity: 0.9;
+}
+
+/* Range resets (cross-browser) */
+.axon-fastbar input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  background: transparent;
+  outline: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Track: thin line */
+.axon-fastbar input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  background: #cfcfcf;
+  border-radius: 2px;
+}
+.axon-fastbar input[type="range"]::-moz-range-track {
+  height: 2px;
+  background: #cfcfcf;
+  border-radius: 2px;
+}
+
+/* Thumb: circle */
+.axon-fastbar input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #111;
+  border: 2px solid #fff;       /* optional ring */
+  margin-top: -6px;             /* center on 2px track (14/2 - 2/2) */
+  cursor: pointer;
+}
+.axon-fastbar input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #111;
+  border: 2px solid #fff;
+  cursor: pointer;
+}
+
+/* Optional current label (unrotated) */
+.axon-fastbar__label {
+  position: absolute;
+  left: 50%;
+  top: 26px;
+  transform: translateX(-50%) rotate(90deg); /* counter-rotate text */
+  font: 12px/1.2 system-ui, sans-serif;
+  color: #111;
+  white-space: nowrap;
+  background: rgba(255,255,255,0.85);
+  padding: 4px 8px;
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+}
+
+
+.axon-loader {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.axon-loader__inner {
+  width: min(420px, 80vw);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+.axon-loader__label {
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  margin-bottom: 8px;
+  color: #222;
+  text-align: center;
+}
+
+.axon-loader__bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: #e6e6e6;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+}
+
+.axon-loader__barFill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #111, #777);
+  transition: width 120ms linear;
+}
+
+/* example */
+.loading-overlay {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  background: #fff;
+  opacity: 1;
+  transition: opacity 400ms ease; /* needed for transitionend */
+  z-index: 9999;
+}
+.loading-overlay.is-done {
+  opacity: 0;
+  pointer-events: none;
+}
+.loading-gif { max-width: 120px; height: auto; }
