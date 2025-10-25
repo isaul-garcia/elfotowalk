@@ -30,7 +30,7 @@ const CARD_SCALE_SPD = 0.18;
 const CARD_RETURN_SPD = 0.18;
 const CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE = 4.25;
 const CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT = 3.75;
-const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.5;
+const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.15;
 const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 3.15;
 const CARD_OFF_SCREEN_X = 1.0;
 const CARD_OFF_SCREEN_Y = -0.75;
@@ -614,21 +614,16 @@ export default function ClickableAxonStackDebug() {
             <div className="axon-expanded__arrows">
               <button
                 className="axon-expanded__arrowBtn"
-                onClick={(e) => {
-                e.stopPropagation();
-                navApiRef.current?.stepExpanded(-1);
-                }}
-                aria-label="Previous"
+                onClick={(e) => { e.stopPropagation(); navApiRef.current?.stepExpanded(-1); }}
+                onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.stepExpanded(-1); }}
               >
                 ←
               </button>
+
               <button
                 className="axon-expanded__arrowBtn"
-                onClick={(e) => {
-                e.stopPropagation();
-                navApiRef.current?.stepExpanded(+1);
-                }}
-                aria-label="Next"
+                onClick={(e) => { e.stopPropagation(); navApiRef.current?.stepExpanded(+1); }}
+                onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.stepExpanded(+1); }}
               >
                 →
               </button>
@@ -1291,6 +1286,9 @@ function LocalZScroller({
 
   const lastEmittedCenterRef = useRef<number>(centerIndexRef.current ?? 0);
 
+
+
+
   const stageOffsetForIndex = useCallback((i: number) => {
     const g = gap ?? 0;
     const stageGap = stageGapRef.current ?? 0;
@@ -1515,6 +1513,48 @@ function LocalZScroller({
     }
   }, [setExpandedIndex]);
 
+  const zOfIndexNow = useCallback((i: number) => {
+    const g = gap ?? 0;
+    let off = 0;
+    if (groupGapsActiveRef.current && (stageGapRef.current ?? 0) > 0) {
+      const map = groupIndexMapRef.current;
+      const gi = map ? map[i] : -1;
+      if (gi >= 0) {
+        const focusG = focusGroupRef.current ?? 0;
+        const delta = Math.max(0, (stageGapRef.current ?? 0) - g);
+        off = (gi - focusG) * delta;
+      }
+    }
+    return -(i * g + off);
+  }, [gap]);
+
+  const snapToIndex = useCallback((i: number) => {
+    if (!planes) return;
+    const idx = Math.max(0, Math.min(planes - 1, i));
+
+    // 1) Snap the internal integrator & group transform
+    const z = zOfIndexNow(idx);
+    zSmoothed.current = z;
+    zRef.current = z;
+    if (ref.current) ref.current.position.set(0, 0, z);
+
+    // 2) Lock center index immediately (bypass “stickiness”)
+    (centerIndexRef as any).prev = idx;
+    centerIndexRef.current = idx;
+    navLockRef.current = 2; // few frames of jitter guard
+
+    // 3) Sync DOM scroll so ScrollControls mapping matches
+    const el = (scroll as any).el as HTMLElement | undefined;
+    if (el) {
+      const { zTop, zBottom } = getZSpan();
+      const pLocal = THREE.MathUtils.clamp((z - zTop) / (zBottom - zTop), 0, 1);
+      const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
+      const max = Math.max(1, el.scrollHeight - el.clientHeight);
+      el.scrollTo({ top: pGlobal * max, behavior: "auto" });
+    }
+  }, [planes, zOfIndexNow, getZSpan, start, end, scroll]);
+
+
   useEffect(() => {
     if (!clearStageExternalRef) return;
     clearStageExternalRef.current = clearStage;
@@ -1633,30 +1673,17 @@ function LocalZScroller({
       setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
       stopAutoScroll: () => { autoVelRef.current = 0; },
       stepExpanded: (step) => {
-        // only when expanded
-        if (expandedIndexRef.current == null) return;
-    
         const maxIdx = Math.max(0, (planes ?? 1) - 1);
         const current = centerIndexRef.current ?? 0;
         const next = Math.max(0, Math.min(maxIdx, current + step));
-    
-        // keep center index in sync (avoids jitter)
-        (centerIndexRef as any).prev = next;
-        centerIndexRef.current = next;
-        navLockRef.current = 2;
-    
-        const groupGapsOn = !!groupGapsActiveRef.current;
-    
-        if (groupGapsOn) {
-          centerOn(next); // smooth scroll keeps working
-          if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
-          if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
-          setExpandedIndex(next);
-          return;
-        }
-    
-        // legacy path (group gaps OFF): recenter and switch
-        centerOn(next);
+
+        // if you want to allow stepping even when not expanded, remove this guard:
+        if (expandedIndexRef.current == null) return;
+
+        // snap position/scroll instantly
+        snapToIndex(next);
+
+        // switch the expanded card cleanly
         if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
         if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
         setExpandedIndex(next);
@@ -1666,7 +1693,7 @@ function LocalZScroller({
 
     navApiExternalRef.current = api;
     return () => { navApiExternalRef.current = null; };
-  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, setExpandedIndex]);
+  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, setExpandedIndex, snapToIndex]);
 
   useEffect(() => {
     const el = (scroll as any).el as HTMLElement | undefined;
@@ -2122,7 +2149,7 @@ function ElasticKnob({
       window.removeEventListener("touchmove", onTouchMove as any);
       window.removeEventListener("touchend", onTouchEnd);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragging]);
 
   return (
