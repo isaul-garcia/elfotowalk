@@ -30,8 +30,8 @@ const CARD_SCALE_SPD = 0.18;
 const CARD_RETURN_SPD = 0.18;
 const CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE = 4.25;
 const CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT = 3.75;
-const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.9;
-const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 4;
+const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.25;
+const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 3.15;
 const CARD_OFF_SCREEN_X = 1.0;
 const CARD_OFF_SCREEN_Y = -0.75;
 const CARD_CENTER_NUDGE_X = -1.0;
@@ -164,6 +164,7 @@ type StackNavApi = {
   clearStage: () => void;
   setAutoScroll: (velPxPerSec: number) => void; // positive = scroll down/forward
   stopAutoScroll: () => void;
+  expandStep: (step: -1 | 1) => void;  // reliable next/prev when expanded
 };
 
 const StackScrollContext = React.createContext<StackCtx>(null);
@@ -613,20 +614,14 @@ export default function ClickableAxonStackDebug() {
             <div className="axon-expanded__arrows">
               <button
                 className="axon-expanded__arrowBtn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
-                }}
+                onClick={(e) => { e.stopPropagation(); navApiRef.current?.expandStep(-1); }}
                 aria-label="Previous"
               >
                 ←
               </button>
               <button
                 className="axon-expanded__arrowBtn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
-                }}
+                onClick={(e) => { e.stopPropagation(); navApiRef.current?.expandStep(+1); }}
                 aria-label="Next"
               >
                 →
@@ -1631,6 +1626,30 @@ function LocalZScroller({
       },
       setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
       stopAutoScroll: () => { autoVelRef.current = 0; },
+      expandStep: (step) => {
+        if (expandedIndexRef.current == null) return;       // only when expanded
+        const current = centerIndexRef.current ?? 0;
+        const next = clampIndex(current + step);
+
+        // keep center index in sync immediately (prevents “one click only”)
+        (centerIndexRef as any).prev = next;
+        centerIndexRef.current = next;
+        navLockRef.current = 2;
+
+        const groupGapsOn = !!groupGapsActiveRef.current;
+
+        if (groupGapsOn) {
+          centerOn(next);                                   // smooth travel
+          if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current;
+          if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
+          setExpandedIndex(next);                           // switch expanded
+        } else {
+          centerOn(next);
+          if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current;
+          if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
+          setExpandedIndex(next);
+        }
+      },
       clearStage,
 
     };
@@ -2093,7 +2112,7 @@ function ElasticKnob({
       window.removeEventListener("touchmove", onTouchMove as any);
       window.removeEventListener("touchend", onTouchEnd);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragging]);
 
   return (

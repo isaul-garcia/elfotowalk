@@ -441,7 +441,7 @@ h3 {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: 12vh;
+  bottom: 15vh;
   width: 80vw;
   max-width: 560px;
   height: 48px;
