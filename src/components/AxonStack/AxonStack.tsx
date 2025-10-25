@@ -30,7 +30,7 @@ const CARD_SCALE_SPD = 0.18;
 const CARD_RETURN_SPD = 0.18;
 const CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE = 4.25;
 const CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT = 3.75;
-const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.25;
+const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.5;
 const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 3.15;
 const CARD_OFF_SCREEN_X = 1.0;
 const CARD_OFF_SCREEN_Y = -0.75;
@@ -164,7 +164,7 @@ type StackNavApi = {
   clearStage: () => void;
   setAutoScroll: (velPxPerSec: number) => void; // positive = scroll down/forward
   stopAutoScroll: () => void;
-  expandStep: (step: -1 | 1) => void;  // reliable next/prev when expanded
+  stepExpanded: (step: number) => void;
 };
 
 const StackScrollContext = React.createContext<StackCtx>(null);
@@ -600,7 +600,7 @@ export default function ClickableAxonStackDebug() {
         <img src={shortLogo} alt="Logo" />
       </div>
 
-      {expandedIdx === null && (
+      {isMobile && expandedIdx === null && (
         <ElasticKnob
           onVelocity={(pxPerSec) => navApiRef.current?.setAutoScroll(pxPerSec)}
           onRelease={() => navApiRef.current?.stopAutoScroll()}
@@ -614,14 +614,20 @@ export default function ClickableAxonStackDebug() {
             <div className="axon-expanded__arrows">
               <button
                 className="axon-expanded__arrowBtn"
-                onClick={(e) => { e.stopPropagation(); navApiRef.current?.expandStep(-1); }}
+                onClick={(e) => {
+                e.stopPropagation();
+                navApiRef.current?.stepExpanded(-1);
+                }}
                 aria-label="Previous"
               >
                 ←
               </button>
               <button
                 className="axon-expanded__arrowBtn"
-                onClick={(e) => { e.stopPropagation(); navApiRef.current?.expandStep(+1); }}
+                onClick={(e) => {
+                e.stopPropagation();
+                navApiRef.current?.stepExpanded(+1);
+                }}
                 aria-label="Next"
               >
                 →
@@ -1626,37 +1632,41 @@ function LocalZScroller({
       },
       setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
       stopAutoScroll: () => { autoVelRef.current = 0; },
-      expandStep: (step) => {
-        if (expandedIndexRef.current == null) return;       // only when expanded
+      stepExpanded: (step) => {
+        // only when expanded
+        if (expandedIndexRef.current == null) return;
+    
+        const maxIdx = Math.max(0, (planes ?? 1) - 1);
         const current = centerIndexRef.current ?? 0;
-        const next = clampIndex(current + step);
-
-        // keep center index in sync immediately (prevents “one click only”)
+        const next = Math.max(0, Math.min(maxIdx, current + step));
+    
+        // keep center index in sync (avoids jitter)
         (centerIndexRef as any).prev = next;
         centerIndexRef.current = next;
         navLockRef.current = 2;
-
+    
         const groupGapsOn = !!groupGapsActiveRef.current;
-
+    
         if (groupGapsOn) {
-          centerOn(next);                                   // smooth travel
-          if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current;
-          if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
-          setExpandedIndex(next);                           // switch expanded
-        } else {
-          centerOn(next);
-          if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current;
+          centerOn(next); // smooth scroll keeps working
+          if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
           if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
           setExpandedIndex(next);
+          return;
         }
+    
+        // legacy path (group gaps OFF): recenter and switch
+        centerOn(next);
+        if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
+        if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
+        setExpandedIndex(next);
       },
       clearStage,
-
     };
 
     navApiExternalRef.current = api;
     return () => { navApiExternalRef.current = null; };
-  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges]);
+  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, setExpandedIndex]);
 
   useEffect(() => {
     const el = (scroll as any).el as HTMLElement | undefined;
@@ -2112,7 +2122,7 @@ function ElasticKnob({
       window.removeEventListener("touchmove", onTouchMove as any);
       window.removeEventListener("touchend", onTouchEnd);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragging]);
 
   return (

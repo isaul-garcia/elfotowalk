@@ -183,11 +183,12 @@ h3 {
 /* Expanded overlay (bottom-right) */
 .axon-expanded {
   position: absolute;
-  bottom: -60px;
-  left: 10%;
+  bottom: 10vh;
+  right: -3vw;
+  left: auto;
 
   height: 20vh;
-  width: 80%;
+  width: 20%;
   margin: auto;
   padding: 0;
   border-radius: 8px;
@@ -202,6 +203,8 @@ h3 {
 .axon-expanded > div {
   padding: 0;
   justify-content: center;
+  display: flex;
+  flex-direction: column;
 }
 
 .axon-expanded__arrows {
@@ -209,7 +212,7 @@ h3 {
   gap: 8px;
   margin-bottom: 6px;
   right: 0;
-  position: absolute;
+  position: relative;
 }
 
 .axon-expanded__arrowBtn {
@@ -219,6 +222,7 @@ h3 {
   background: transparent;
   border: none;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .axon-expanded__name {
@@ -544,4 +548,26 @@ h3 {
     background: rgba(0, 0, 0, 0.25);
     z-index: 100;
   }
+
+.axon-expanded {
+  bottom: -60px;
+  left: 10%;
+  right: auto;
+  width: 80%;
+  display: block;
+}
+.axon-expanded > div {
+  padding: 0;
+  justify-content: center;
+  display: contents;
+  flex-direction: row;
+}
+
+.axon-expanded__arrows {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 6px;
+  right: 0;
+  position: absolute;
+}
 }
