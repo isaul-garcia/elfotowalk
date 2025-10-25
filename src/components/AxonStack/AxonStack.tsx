@@ -124,6 +124,8 @@ export default function ClickableAxonStackDebug() {
 
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [centeredIdx, setCenteredIdx] = useState(0);
+  const [namesOpen, setNamesOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
 
   const camRef = useRef<THREE.OrthographicCamera>(null!);
   const clearStageRef = useRef<(() => void) | null>(null);
@@ -166,7 +168,7 @@ export default function ClickableAxonStackDebug() {
   }, []);
 
   const IMAGES = useMemo<string[]>(
-    () => Array.from({ length: 388 }, (_, i) => `/stack-images/thumb/${String(i).padStart(3, "0")}.jpg`),
+    () => Array.from({ length: 60 }, (_, i) => `/stack-images/thumb/${String(i).padStart(3, "0")}.jpg`),
     []
   );
 
@@ -331,9 +333,59 @@ export default function ClickableAxonStackDebug() {
 
   const introActive = gapAnimT < 0.999;
   const fired = useRef(false);
+
+  const selectGroup = useCallback(
+    (start: number, end: number) => {
+      const go = () =>
+        navApiRef.current?.goToGroupAndStage(start, end, STAGE_GAP_WHEN_STAGED);
+  
+      // Desktop: go immediately
+      if (!isMobile) {
+        go();
+        return;
+      }
+  
+      // Mobile: if the sheet is already closed, just go
+      if (!namesOpen) {
+        go();
+        return;
+      }
+  
+      // Mobile: close the sheet, then wait for the transition to end
+      const el = namesContainerRef.current;
+      setNamesOpen(false);
+  
+      if (el) {
+        let fired = false;
+  
+        const onEnd = (ev: TransitionEvent) => {
+          // We only need it once; any property is fine (opacity/transform)
+          if (fired) return;
+          fired = true;
+          el.removeEventListener("transitionend", onEnd as any);
+          go();
+        };
+  
+        el.addEventListener("transitionend", onEnd as any, { once: true });
+  
+        // Safety fallback in case transitionend doesn’t fire
+        setTimeout(() => {
+          if (fired) return;
+          fired = true;
+          el.removeEventListener("transitionend", onEnd as any);
+          go();
+        }, 500); // keep in sync with your CSS duration
+      } else {
+        // No element? Fallback to a simple delay
+        setTimeout(go, 500);
+      }
+    },
+    [isMobile, namesOpen]
+  );  
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
-    <LoaderOverlay onDone={() => { if (!fired.current) { fired.current = true; startGapIntro(600); }}} />
+      <LoaderOverlay onDone={() => { if (!fired.current) { fired.current = true; startGapIntro(600); } }} />
 
       <Canvas
         orthographic
@@ -399,36 +451,64 @@ export default function ClickableAxonStackDebug() {
         {/* {DEBUG && <Stats showPanel={0} className="r3f-stats" />} */}
       </Canvas>
 
+      {/* MOBILE BURGER */}
+      {isMobile && expandedIdx === null && (
+        <button
+          className={`axon-burger ab-r ${namesOpen ? "is-active" : ""}`}
+          aria-label="Open photographers"
+          onClick={() => setNamesOpen((v) => !v)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+      )}
+
+      {expandedIdx === null && (
+        <>
+          <button
+            className={`axon-burger ab-l ${infoOpen ? "is-active" : ""}`}
+            aria-label="Open photographers"
+            onClick={() => setInfoOpen((v) => !v)}
+          >
+            𝓲
+          </button>
+
+          <div
+            className={`axon-info ${infoOpen ? "is-open" : ""}`}
+          >
+            <span>
+              hola this is info
+            </span>
+          </div>
+        </>
+      )}
+
       {/* NAMES LIST */}
       <div
         ref={namesContainerRef}
         aria-hidden={expandedIdx !== null}
-        className={`axon-names ${expandedIdx !== null ? "is-hidden" : ""}`}
+        className={`axon-names ${expandedIdx !== null ? "is-hidden" : ""} ${namesOpen ? "is-open" : ""}`}
       >
-        <div ref={namesListRef} className="axon-names__list">
-          {ANCHORS.map((a) => {
-            const [start, end] = a.indices;
-            const active = centeredIdx >= start && centeredIdx <= end;
-            return (
-              <button
-                key={a.name}
-                className={`axon-names__btn ${active ? "is-active" : ""}`}
-                onClick={() =>
-                  navApiRef.current?.goToGroupAndStage(
-                    start,
-                    end,
-                    STAGE_GAP_WHEN_STAGED
-                  )
-                }
-                title={`${a.name} (${start}–${end})`}
-              >
-                {a.name}
-              </button>
-            );
-          })}
+        <div>
+          <div ref={namesListRef} className="axon-names__list">
+            {ANCHORS.map((a) => {
+              const [start, end] = a.indices;
+              const active = centeredIdx >= start && centeredIdx <= end;
+              return (
+                <button
+                  key={a.name}
+                  className={`axon-names__btn ${active ? "is-active" : ""}`}
+                  onClick={() => selectGroup(start, end)}
+                  title={`${a.name} (${start}–${end})`}
+                >
+                  {a.name}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
-
 
       {/* CITY + DATE (top-left) */}
       {!isMobile && (
@@ -452,53 +532,52 @@ export default function ClickableAxonStackDebug() {
       {/* EXPANDED OVERLAY */}
       {expandedName && (
         <div className="axon-expanded">
-          <div className="axon-expanded__arrows">
-            <button
-              className="axon-expanded__arrowBtn"
-              onClick={(e) => {
-                e.stopPropagation();
-                window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
-              }}
-              aria-label="Previous"
-            >
-              ←
-            </button>
-            <button
-              className="axon-expanded__arrowBtn"
-              onClick={(e) => {
-                e.stopPropagation();
-                window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
-              }}
-              aria-label="Next"
-            >
-              →
-            </button>
-          </div>
-
-          {expandedInfo && (
-            <div className="axon-expanded__count">
-              ({expandedInfo.current}/{expandedInfo.total})
-            </div>
-          )}
-
-          <div className="axon-expanded__name">{expandedName.name}</div>
-
-          {expandedName.instagram && (
-            <span className="axon-expanded__ig">
-              instagram:{" "}
-              <a
-                href={`https://instagram.com/${expandedName.instagram}`}
-                target="_blank"
-                rel="noreferrer"
-                title={`Open @${expandedName.instagram} on Instagram`}
+          <div>
+            <div className="axon-expanded__arrows">
+              <button
+                className="axon-expanded__arrowBtn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+                }}
+                aria-label="Previous"
               >
-                @{expandedName.instagram}
-              </a>
-            </span>
-          )}
+                ←
+              </button>
+              <button
+                className="axon-expanded__arrowBtn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+                }}
+                aria-label="Next"
+              >
+                →
+              </button>
+            </div>
+
+            <div className="axon-expanded__name">{expandedName.name}</div>{expandedInfo && (
+              <div className="axon-expanded__count">
+                ({expandedInfo.current}/{expandedInfo.total})
+              </div>
+            )}
+
+            {expandedName.instagram && (
+              <span className="axon-expanded__ig">
+                instagram:{" "}
+                <a
+                  href={`https://instagram.com/${expandedName.instagram}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`Open @${expandedName.instagram} on Instagram`}
+                >
+                  @{expandedName.instagram}
+                </a>
+              </span>
+            )}
+          </div>
         </div>
       )}
-
     </div>
   );
 }
@@ -1288,9 +1367,6 @@ function LocalZScroller({
       navLockRef.current = 2; // avoid jitter for a couple frames
     }
   }, [gap, centerOn]);
-
-
-
 
   const [expandedIndex, setExpandedIndexState] = useState<number | null>(null);
   const expandedIndexRef = useRef<number | null>(null);
