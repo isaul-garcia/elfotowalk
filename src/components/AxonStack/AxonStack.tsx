@@ -41,14 +41,6 @@ const EXPANDED_RENDER_ORDER = 1_000_000;
 const STAGE_GAP_WHEN_STAGED = 2;
 const STAGE_GAP_WHEN_EXPANDED = 10;
 const BACKDROP_FADE_SPD = 0.18;
-// const CARD_Z_LERP = 0.2;
-// const CARD_FAR_THOLD = 8.9;
-// const CARD_MAX_SPD = 84;
-
-const CARD_Z_LERP = 0.5;
-const CARD_FAR_THOLD = 2.3;
-const CARD_MAX_SPD = 34;
-const TAU = 0.2;
 
 // ────────────────────────────────────────────────────────────────────────────────
 // Config / Debug
@@ -171,6 +163,8 @@ type StackNavApi = {
   goToRangeAndStage: (start: number, end: number, gapAbs?: number) => void; // NEW
   goToGroupAndStage: (start: number, end: number, gapAbs?: number) => void;
   clearStage: () => void;
+  setAutoScroll: (velPxPerSec: number) => void; // positive = scroll down/forward
+  stopAutoScroll: () => void;
 };
 
 const StackScrollContext = React.createContext<StackCtx>(null);
@@ -605,6 +599,13 @@ export default function ClickableAxonStackDebug() {
       <div className="axon-logo">
         <img src={shortLogo} alt="Logo" />
       </div>
+
+      {isMobile && expandedIdx === null && (
+        <ElasticKnob
+          onVelocity={(pxPerSec) => navApiRef.current?.setAutoScroll(pxPerSec)}
+          onRelease={() => navApiRef.current?.stopAutoScroll()}
+        />
+      )}
 
       {/* EXPANDED OVERLAY */}
       {expandedName && (
@@ -1261,6 +1262,7 @@ function LocalZScroller({
   const isMobile = useIsMobile(768);
   const followRangeRef = useRef<boolean>(false);
   const RANGE_EXIT_HYST = 0;
+  const autoVelRef = useRef<number>(0);
 
   const zRef = useRef(0);
   const centerIndexRef = useRef(0);
@@ -1628,7 +1630,10 @@ function LocalZScroller({
         centerOn(s);              // travel first (lift works here)
         navLockRef.current = 2;
       },
+      setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
+      stopAutoScroll: () => { autoVelRef.current = 0; },
       clearStage,
+
     };
 
     navApiExternalRef.current = api;
@@ -1790,6 +1795,18 @@ function LocalZScroller({
       }
     }
 
+    {
+      const el = (scroll as any).el as HTMLElement | undefined;
+      if (el && expandedIndexRef.current == null) {
+        const v = autoVelRef.current; // px/sec
+        if (v !== 0) {
+          el.scrollTop += v * dt;
+          if (el.scrollTop < 0) el.scrollTop = 0;
+          const max = Math.max(0, el.scrollHeight - el.clientHeight);
+          if (el.scrollTop > max) el.scrollTop = max;
+        }
+      }
+    }
 
     // Stage the range once we arrive at its center
     if (pendingStageRangeRef.current) {
@@ -1987,18 +2004,18 @@ function useIsMobile(breakpoint = 768) {
 function useMotionTuning() {
   const isMobile = useIsMobile(768);
   return isMobile
-  ? { 
-    // Mobile (snappier)
-    CARD_Z_LERP: 0.5, 
-    CARD_FAR_THOLD: 2.3, 
-    CARD_MAX_SPD: 88, 
-    TAU: 0.12 
-  } : { 
+    ? {
+      // Mobile (snappier)
+      CARD_Z_LERP: 0.5,
+      CARD_FAR_THOLD: 2.3,
+      CARD_MAX_SPD: 88,
+      TAU: 0.12
+    } : {
       // Desktop (your current values)
-      CARD_Z_LERP: 0.5, 
-      CARD_FAR_THOLD: 2.3, 
-      CARD_MAX_SPD: 34, 
-      TAU: 0.2  
+      CARD_Z_LERP: 0.5,
+      CARD_FAR_THOLD: 2.3,
+      CARD_MAX_SPD: 34,
+      TAU: 0.2
     };
 }
 
@@ -2015,4 +2032,83 @@ function makeBaseFrontMaterial() {
     opacity: 1,
   });
   return m;
+}
+
+
+// ────────────────────────────────────────────────────────────────────────────────
+// elastic knob
+// ────────────────────────────────────────────────────────────────────────────────
+
+function ElasticKnob({
+  onVelocity,
+  onRelease,
+  maxPxPerSec = 3600,           // tune max speed
+  expo = 1.25,                  // response curve; higher = steeper edges
+}: {
+  onVelocity: (pxPerSec: number) => void;
+  onRelease: () => void;
+  maxPxPerSec?: number;
+  expo?: number;
+}) {
+  const hostRef = React.useRef<HTMLDivElement>(null);
+  const dotRef = React.useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = React.useState(false);
+
+  const setFromX = (clientX: number) => {
+    const el = hostRef.current; if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const half = rect.width / 2;
+    let n = (clientX - cx) / half;       // [-1..1], negative = up, positive = down
+    n = Math.max(-1, Math.min(1, n));
+    const shaped = Math.sign(n) * Math.pow(Math.abs(n), expo);
+    const v = shaped * maxPxPerSec;
+
+    if (dotRef.current) dotRef.current.style.left = `${(n * 0.5 + 0.5) * 100}%`;
+    onVelocity(v);
+  };
+
+  const stop = () => {
+    setDragging(false);
+    if (dotRef.current) dotRef.current.style.left = "50%";
+    onRelease();
+  };
+
+  React.useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => { if (dragging) setFromX(e.clientX); };
+    const onMouseUp = () => dragging && stop();
+    const onTouchMove = (e: TouchEvent) => {
+      if (!dragging || e.touches.length !== 1) return;
+      e.preventDefault();
+      setFromX(e.touches[0].clientX);
+    };
+    const onTouchEnd = () => dragging && stop();
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    window.addEventListener("touchend", onTouchEnd);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("touchmove", onTouchMove as any);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dragging]);
+
+  return (
+    <div
+      ref={hostRef}
+      className="axon-knob"
+      onMouseDown={(e) => { setDragging(true); setFromX(e.clientX); }}
+      onTouchStart={(e) => {
+        setDragging(true);
+        if (e.touches.length === 1) setFromX(e.touches[0].clientX);
+      }}
+    >
+      <div className="axon-knob__track" />
+      <div ref={dotRef} className="axon-knob__dot" />
+    </div>
+  );
 }
