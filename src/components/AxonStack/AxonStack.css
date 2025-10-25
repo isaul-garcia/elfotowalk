@@ -449,6 +449,7 @@ h3 {
   display: grid;
   place-items: center;
   touch-action: none; /* ensure smooth dragging on mobile */
+  z-index: 7;
 }
 .axon-knob__track {
   position: absolute;

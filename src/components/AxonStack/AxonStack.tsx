@@ -41,7 +41,6 @@ const EXPANDED_RENDER_ORDER = 1_000_000;
 const STAGE_GAP_WHEN_STAGED = 2;
 const STAGE_GAP_WHEN_EXPANDED = 10;
 const BACKDROP_FADE_SPD = 0.18;
-
 // ────────────────────────────────────────────────────────────────────────────────
 // Config / Debug
 // ────────────────────────────────────────────────────────────────────────────────
@@ -600,7 +599,7 @@ export default function ClickableAxonStackDebug() {
         <img src={shortLogo} alt="Logo" />
       </div>
 
-      {isMobile && expandedIdx === null && (
+      {expandedIdx === null && (
         <ElasticKnob
           onVelocity={(pxPerSec) => navApiRef.current?.setAutoScroll(pxPerSec)}
           onRelease={() => navApiRef.current?.stopAutoScroll()}
