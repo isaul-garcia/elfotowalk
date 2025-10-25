@@ -1,8 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap");
 
-span, a, div, h1, h2, h3 {
+body {
+  margin: 0 !important;
+}
+span,
+a,
+div,
+h1,
+h2,
+h3 {
   font-family: "Figtree", sans-serif;
-
 }
 
 /* Container: names list (bottom-right) */
@@ -29,14 +36,13 @@ span, a, div, h1, h2, h3 {
   -webkit-overflow-scrolling: touch;
 
   /* smooth fade/slide */
-  transition:
-    opacity 180ms ease,
-    transform 180ms ease,
-    filter 180ms ease;
+  transition: opacity 180ms ease, transform 180ms ease, filter 180ms ease;
   will-change: opacity, transform, filter;
   overflow: visible; /* <-- change from auto */
   --thumb-top: 0%;
   --thumb-height: 20%;
+
+  z-index: 8;
 }
 .axon-names::after {
   content: "";
@@ -64,7 +70,6 @@ span, a, div, h1, h2, h3 {
   z-index: 2;
 }
 
-
 .axon-names.is-hidden {
   opacity: 0;
   pointer-events: none;
@@ -83,14 +88,13 @@ span, a, div, h1, h2, h3 {
   scrollbar-gutter: stable;
 
   /* hide scrollbar everywhere */
-  scrollbar-width: none;        /* Firefox */
-  -ms-overflow-style: none;     /* IE/old Edge */
-  position: relative;           /* create a stacking context for safety */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/old Edge */
+  position: relative; /* create a stacking context for safety */
 }
 .axon-names__list::-webkit-scrollbar {
-  display: none;                /* Chrome/Edge/Safari */
+  display: none; /* Chrome/Edge/Safari */
 }
-
 
 .axon-names__btn {
   cursor: pointer;
@@ -117,10 +121,8 @@ span, a, div, h1, h2, h3 {
   position: absolute;
   top: 40px;
   left: 40px;
-
   color: #000;
   pointer-events: none;
-
   font-weight: 600;
   letter-spacing: -0.3px;
   font-size: 30px;
@@ -141,13 +143,15 @@ span, a, div, h1, h2, h3 {
   width: 100%;
   text-align: center;
   justify-content: center;
-  
+
   color: #000;
   pointer-events: none;
-  
+
   font-weight: 600;
   letter-spacing: -0.3px;
   font-size: 30px;
+
+  z-index: 11;
 }
 .axon-title > img {
   width: 20vh;
@@ -168,6 +172,8 @@ span, a, div, h1, h2, h3 {
   font-weight: 600;
   letter-spacing: -0.3px;
   font-size: 30px;
+
+  z-index: 11;
 }
 
 .axon-logo img {
@@ -177,37 +183,46 @@ span, a, div, h1, h2, h3 {
 /* Expanded overlay (bottom-right) */
 .axon-expanded {
   position: absolute;
-  bottom: 150px;
-  right: 80px;
+  bottom: -60px;
+  left: 10%;
 
-  min-height: 20vh;
-  min-width: 30vh;
-
-  padding: 8px 10px;
+  height: 20vh;
+  width: 80%;
+  margin: auto;
+  padding: 0;
   border-radius: 8px;
 
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0);
   color: #000;
 
   pointer-events: auto;
   user-select: text;
+  display: flex;
+}
+.axon-expanded > div {
+  padding: 0;
+  justify-content: center;
 }
 
 .axon-expanded__arrows {
   display: inline-flex;
   gap: 8px;
   margin-bottom: 6px;
+  right: 0;
+  position: absolute;
 }
 
 .axon-expanded__arrowBtn {
-  font-size: 24px;
+  font-size: 34px;
+  line-height: 34px;
+  padding: 0 15px 7px 15px;
   background: transparent;
   border: none;
   cursor: pointer;
 }
 
 .axon-expanded__name {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 600;
   letter-spacing: 0.3px;
   margin: 6px 0 2px 0;
@@ -229,7 +244,7 @@ span, a, div, h1, h2, h3 {
   right: -90px;
   top: 50%;
   transform: translateY(-50%) rotate(90deg); /* rotate to make it vertical */
-  width: 220px;           /* visual length of the line after rotation */
+  width: 220px; /* visual length of the line after rotation */
   pointer-events: auto;
   z-index: 10;
   opacity: 0.9;
@@ -266,8 +281,8 @@ span, a, div, h1, h2, h3 {
   height: 14px;
   border-radius: 50%;
   background: #111;
-  border: 2px solid #fff;       /* optional ring */
-  margin-top: -6px;             /* center on 2px track (14/2 - 2/2) */
+  border: 2px solid #fff; /* optional ring */
+  margin-top: -6px; /* center on 2px track (14/2 - 2/2) */
   cursor: pointer;
 }
 .axon-fastbar input[type="range"]::-moz-range-thumb {
@@ -288,12 +303,11 @@ span, a, div, h1, h2, h3 {
   font: 12px/1.2 system-ui, sans-serif;
   color: #111;
   white-space: nowrap;
-  background: rgba(255,255,255,0.85);
+  background: rgba(255, 255, 255, 0.85);
   padding: 4px 8px;
   border-radius: 8px;
-  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
 }
-
 
 .axon-loader {
   position: absolute;
@@ -305,7 +319,8 @@ span, a, div, h1, h2, h3 {
 
 .axon-loader__inner {
   width: min(420px, 80vw);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
+    "Apple Color Emoji", "Segoe UI Emoji";
 }
 
 .axon-loader__label {
@@ -322,7 +337,7 @@ span, a, div, h1, h2, h3 {
   border-radius: 999px;
   background: #e6e6e6;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 
 .axon-loader__barFill {
@@ -335,8 +350,10 @@ span, a, div, h1, h2, h3 {
 
 /* example */
 .loading-overlay {
-  position: fixed; inset: 0;
-  display: grid; place-items: center;
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
   background: #fff;
   opacity: 1;
   transition: opacity 400ms ease; /* needed for transitionend */
@@ -346,4 +363,137 @@ span, a, div, h1, h2, h3 {
   opacity: 0;
   pointer-events: none;
 }
-.loading-gif { max-width: 120px; height: auto; }
+.loading-gif {
+  max-width: 120px;
+  height: auto;
+}
+
+/* ── Burger button (mobile only) ───────────────────────── */
+.axon-burger {
+  position: fixed;
+  bottom: 40px;
+  z-index: 101; /* above sheet */
+  width: 50px;
+  height: 50px;
+  border: 0;
+  border-radius: 99999px;
+  background: #fff;
+
+  display: grid;
+  place-items: center;
+  padding: 16px 0;
+  border: 1px solid #c8c8c8;
+  overflow: visible;
+  cursor: pointer;
+}
+.ab-l {
+  left: 40px;
+}
+.ab-r {
+  right: 40px;
+}
+
+.axon-burger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: #111;
+  margin: 2px 0;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+  overflow: visible;
+}
+.axon-burger.is-active span:nth-child(1) {
+  transform: translateY(6px) rotate(45deg);
+}
+.axon-burger.is-active span:nth-child(2) {
+  opacity: 0;
+}
+.axon-burger.is-active span:nth-child(3) {
+  transform: translateY(-6px) rotate(-45deg);
+}
+
+.axon-info {
+  /* slide up */
+  opacity: 0;
+  pointer-events: none;
+  height: 100vh;
+  width: 100%;
+  top: 0;
+  position: absolute;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(6px);
+  transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 180ms ease;
+  z-index: 10;
+  display: flex;
+  align-items: center;      /* vertical */
+  justify-content: center;  /* horizontal */
+  text-align: center; 
+}
+.axon-info.is-open {
+  transform: translateY(0); /* slide up */
+  opacity: 1;
+  pointer-events: auto;
+}
+.axon-info>span {
+  max-width: 60ch;
+}
+
+/* ── Names as bottom sheet on mobile ───────────────────── */
+@media (max-width: 768px) {
+  /* turn the existing panel into a sheet */
+  .axon-names {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    margin: 0;
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(6px);
+    transform: translateY(100%); /* hidden off-screen */
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      opacity 180ms ease;
+    backdrop-filter: blur(6px);
+  }
+  .axon-names > div {
+    margin: 30px;
+    margin-top: 25vh;
+  }
+  .axon-names.is-open {
+    transform: translateY(0); /* slide up */
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* tighten list spacing on mobile */
+  .axon-names__list {
+    max-height: 48vh;
+    padding-right: 8px;
+    gap: 6px;
+  }
+  .axon-names__btn {
+    font-size: 24px;
+  }
+
+  /* the thin progress line on the right still works */
+  .axon-names::after,
+  .axon-names::before {
+    right: 16px;
+    opacity: 1;
+  }
+  .axon-names::before {
+    background: #7d7d7d;
+  }
+
+  /* optional: dim backdrop */
+  .axon-namesBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.25);
+    z-index: 100;
+  }
+}
