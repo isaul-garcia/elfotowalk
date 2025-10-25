@@ -759,6 +759,7 @@ function Card({
   isLast?: boolean
 }) {
   const isMobile = useIsMobile(768);
+  const { CARD_Z_LERP: Z_LERP } = useMotionTuning();
 
   const lastTickLength = isLast ? tickLength : tickLength; // shorter at the end
 
@@ -1027,7 +1028,7 @@ function Card({
       ref.current.position.y = targetY;
       ref.current.position.z = targetZ;
     } else {
-      ref.current.position.z += (targetZ - ref.current.position.z) * CARD_Z_LERP;
+      ref.current.position.z += (targetZ - ref.current.position.z) * Z_LERP;
     }
 
     if (switchLock > 0 && lastExpanded === index) {
@@ -1283,6 +1284,8 @@ function LocalZScroller({
   const prevStagedIndexRef = useRef<number | null>(null);
   const prevRangeStartRef = useRef<number | null>(null);
   const prevRangeEndRef = useRef<number | null>(null);
+
+  const tune = useMotionTuning();
 
   const lastEmittedCenterRef = useRef<number>(centerIndexRef.current ?? 0);
 
@@ -1714,8 +1717,8 @@ function LocalZScroller({
     const oneGap = (gap ?? 0.018);
 
     // Far threshold: when we're farther than this, use constant-speed catchup
-    const farThreshold = oneGap * CARD_FAR_THOLD;           // ~60% of one card spacing
-    const maxSpeed = oneGap * CARD_MAX_SPD;             // cards per second (try 12–18)
+    const farThreshold = oneGap * tune.CARD_FAR_THOLD;
+    const maxSpeed = oneGap * tune.CARD_MAX_SPD;             // cards per second (try 12–18)
     const maxStep = maxSpeed * dt;           // per-frame step cap
 
 
@@ -1726,7 +1729,7 @@ function LocalZScroller({
       const step = Math.sign(delta) * maxStep;
       zSmoothed.current += Math.abs(delta) > Math.abs(step) ? step : delta;
     } else {
-      const alpha = 1 - Math.exp(-dt / Math.max(1e-4, TAU));
+      const alpha = 1 - Math.exp(-dt / Math.max(1e-4, tune.TAU));
       zSmoothed.current += delta * alpha;
     }
 
@@ -1979,6 +1982,24 @@ function useIsMobile(breakpoint = 768) {
   }, [breakpoint]);
 
   return isMobile;
+}
+
+function useMotionTuning() {
+  const isMobile = useIsMobile(768);
+  return isMobile
+  ? { 
+    // Mobile (snappier)
+    CARD_Z_LERP: 0.9, 
+    CARD_FAR_THOLD: 0.5, 
+    CARD_MAX_SPD: 58, 
+    TAU: 0.12 
+  } : { 
+      // Desktop (your current values)
+      CARD_Z_LERP: 0.5, 
+      CARD_FAR_THOLD: 2.3, 
+      CARD_MAX_SPD: 34, 
+      TAU: 0.2  
+    };
 }
 
 // ────────────────────────────────────────────────────────────────────────────────
