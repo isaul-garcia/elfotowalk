@@ -1540,59 +1540,60 @@ function LocalZScroller({
   }, [scroll]);
 
 
-// compute Z of an index with current gaps
-const zOfIndexNow = (i: number) => {
-  const g = gap ?? 0;
-  let off = 0;
-  if (groupGapsActiveRef.current && (stageGapRef.current ?? 0) > 0) {
-    const map = groupIndexMapRef.current;
-    const gi = map ? map[i] : -1;
-    if (gi >= 0) {
-      const focusG = focusGroupRef.current ?? 0;
-      const delta = Math.max(0, (stageGapRef.current ?? 0) - g);
-      off = (gi - focusG) * delta;
+  // compute Z of an index with current gaps
+  const zOfIndexNow = (i: number) => {
+    const g = gap ?? 0;
+    let off = 0;
+    if (groupGapsActiveRef.current && (stageGapRef.current ?? 0) > 0) {
+      const map = groupIndexMapRef.current;
+      const gi = map ? map[i] : -1;
+      if (gi >= 0) {
+        const focusG = focusGroupRef.current ?? 0;
+        const delta = Math.max(0, (stageGapRef.current ?? 0) - g);
+        off = (gi - focusG) * delta;
+      }
     }
-  }
-  return -(i * g + off);
-};
+    return -(i * g + off);
+  };
 
-// 1) Jump stack transform immediately to an index (bypass DOM scroll)
-const jumpToIndexImmediate = (i: number) => {
-  const maxIdx = Math.max(0, (planes ?? 1) - 1);
-  const idx = Math.max(0, Math.min(maxIdx, i));
-  const z = zOfIndexNow(idx);
+  // 1) Jump stack transform immediately to an index (bypass DOM scroll)
+  const jumpToIndexImmediate = (i: number) => {
+    const maxIdx = Math.max(0, (planes ?? 1) - 1);
+    const idx = Math.max(0, Math.min(maxIdx, i));
+    const z = zOfIndexNow(idx);
+  
+    zSmoothed.current = z;
+    zRef.current = z;
+    ref.current?.position.set(0, 0, z);
+  
+    (centerIndexRef as any).prev = idx;
+    centerIndexRef.current = idx;
+  
+    navLockRef.current = 8;      // a few frames of center “stickiness”
+    jumpHoldRef.current = 3;     // NEW: hold the physics from pulling back
+  };
+  
 
-  // write the actual transform
-  zSmoothed.current = z;
-  zRef.current = z;
-  if (ref.current) ref.current.position.set(0, 0, z);
+  // 2) (Optional) sync DOM scroll to current Z, so ScrollControls' offset matches
+  const syncDomScrollToCurrentZ = () => {
+    const el = (scroll as any).el as HTMLElement | undefined;
+    if (!el) return;
 
-  // keep center in sync & hold it for a few frames
-  (centerIndexRef as any).prev = idx;
-  centerIndexRef.current = idx;
-  navLockRef.current = 6; // longer on mobile
-};
+    const { zTop, zBottom } = getZSpan();
+    const pLocal = THREE.MathUtils.clamp(
+      (zSmoothed.current - zTop) / (zBottom - zTop),
+      0, 1
+    );
+    const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
+    const max = Math.max(1, el.scrollHeight - el.clientHeight);
+    const target = pGlobal * max;
 
-// 2) (Optional) sync DOM scroll to current Z, so ScrollControls' offset matches
-const syncDomScrollToCurrentZ = () => {
-  const el = (scroll as any).el as HTMLElement | undefined;
-  if (!el) return;
+    // best-effort: different code paths for iOS quirks
+    el.scrollTo?.({ top: target, behavior: "auto" });
+    el.scrollTop = target;
+  };
 
-  const { zTop, zBottom } = getZSpan();
-  const pLocal = THREE.MathUtils.clamp(
-    (zSmoothed.current - zTop) / (zBottom - zTop),
-    0, 1
-  );
-  const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
-  const max = Math.max(1, el.scrollHeight - el.clientHeight);
-  const target = pGlobal * max;
-
-  // best-effort: different code paths for iOS quirks
-  el.scrollTo?.({ top: target, behavior: "auto" });
-  el.scrollTop = target;
-};
-
-
+  const jumpHoldRef = useRef(0);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (expandedIndexRef.current == null) return;
@@ -1606,6 +1607,10 @@ const syncDomScrollToCurrentZ = () => {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const syncDomScrollSoon = () =>
+    requestAnimationFrame(() => requestAnimationFrame(syncDomScrollToCurrentZ));  
+
+
   const stepExpanded = useCallback((step: -1 | 1) => {
     if ((expandedIndexRef.current ?? null) == null) return;
   
@@ -1613,7 +1618,7 @@ const syncDomScrollToCurrentZ = () => {
     const current = centerIndexRef.current ?? 0;
     const next = Math.max(0, Math.min(maxIdx, current + step));
   
-    // 1) Move the stack immediately (this is the key change)
+    // 1) Jump stack immediately
     jumpToIndexImmediate(next);
   
     // 2) Help the expanded switch snap nicely
@@ -1623,13 +1628,10 @@ const syncDomScrollToCurrentZ = () => {
     // 3) Flip expanded to next
     setExpandedIndex(next);
   
-    // 4) Optionally sync DOM scroll afterward (non-critical on iOS)
-    setTimeout(syncDomScrollToCurrentZ, 0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jumpToIndexImmediate, setExpandedIndex, planes]);
+    // 4) Sync DOM scroll after layout has caught up
+    syncDomScrollSoon();
+  }, [jumpToIndexImmediate, setExpandedIndex]);
   
-
-
   useEffect(() => {
     if (!navApiExternalRef) return;
 
@@ -1772,15 +1774,23 @@ const syncDomScrollToCurrentZ = () => {
       if (atBottom) p = 1;
     }
 
-    const snap = (snapEndThreshold ?? 0.995);
+    // const snap = (snapEndThreshold ?? 0.995);
+    const snap = THREE.MathUtils.clamp(snapEndThreshold ?? 0.995, 0, 1);
+
     if (p > snap) p = 1;
     else if (p < (1 - snap)) p = 0;
 
     const { zTop, zBottom } = getZSpan();
 
     // map scroll p∈[0..1] to z∈[zTop..zBottom]
-    const zTarget = THREE.MathUtils.lerp(zTop, zBottom, p);
+    // const zTarget = THREE.MathUtils.lerp(zTop, zBottom, p);
+    let zTarget = THREE.MathUtils.lerp(zTop, zBottom, p);
 
+    // NEW: if we just jumped, don't let the scroll mapping drag us back yet
+    if (jumpHoldRef.current > 0) {
+      zTarget = zSmoothed.current;
+      jumpHoldRef.current -= 1;
+    }
     // 3) HYBRID CONTROLLER (no p==0/1 snap for zSmoothed)
     const oneGap = (gap ?? 0.018);
 
