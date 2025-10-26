@@ -164,7 +164,7 @@ type StackNavApi = {
   clearStage: () => void;
   setAutoScroll: (velPxPerSec: number) => void; // positive = scroll down/forward
   stopAutoScroll: () => void;
-  stepExpanded: (step: number) => void;
+  jumpByCards: (cards: number) => void;
 };
 
 const StackScrollContext = React.createContext<StackCtx>(null);
@@ -614,28 +614,13 @@ export default function ClickableAxonStackDebug() {
             <div className="axon-expanded__arrows">
               <button
                 className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  navApiRef.current?.stepExpanded(-1);
-                }}
-                aria-label="Previous"
-              >
-                ←
-              </button>
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.jumpByCards(-3); }}
+              >←</button>
 
               <button
                 className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  navApiRef.current?.stepExpanded(+1);
-                }}
-                aria-label="Next"
-              >
-                →
-              </button>
-
+                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.jumpByCards(+3); }}
+              >→</button>
             </div>
 
             <div className="axon-expanded__name">{expandedName.name}</div>{expandedInfo && (
@@ -1519,50 +1504,6 @@ function LocalZScroller({
     }
   }, [setExpandedIndex]);
 
-  // current Z for index i with current group gaps
-  const zOfIndexNow = useCallback((i: number) => {
-    const g = gap ?? 0;
-    let off = 0;
-    if (groupGapsActiveRef.current && (stageGapRef.current ?? 0) > 0) {
-      const map = groupIndexMapRef.current;
-      const gi = map ? map[i] : -1;
-      if (gi >= 0) {
-        const focusG = focusGroupRef.current ?? 0;
-        const delta = Math.max(0, (stageGapRef.current ?? 0) - g);
-        off = (gi - focusG) * delta;
-      }
-    }
-    return -(i * g + off);
-  }, [gap]);
-
-  // hard snap internal state AND DOM scroll to a given index
-  const snapToIndex = useCallback((i: number) => {
-    if (!planes) return;
-    const idx = Math.max(0, Math.min(planes - 1, i));
-
-    // 1) snap integrator + object position
-    const z = zOfIndexNow(idx);
-    zSmoothed.current = z;
-    zRef.current = z;
-    if (ref.current) ref.current.position.set(0, 0, z);
-
-    // 2) lock center index immediately (bypass stickiness)
-    (centerIndexRef as any).prev = idx;
-    centerIndexRef.current = idx;
-    navLockRef.current = 2;
-
-    // 3) sync ScrollControls’ DOM scroll mapping
-    const el = (scroll as any).el as HTMLElement | undefined;
-    if (el) {
-      const { zTop, zBottom } = getZSpan();
-      const pLocal = THREE.MathUtils.clamp((z - zTop) / (zBottom - zTop), 0, 1);
-      const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
-      const max = Math.max(1, el.scrollHeight - el.clientHeight);
-      el.scrollTo({ top: pGlobal * max, behavior: "auto" });
-    }
-  }, [planes, zOfIndexNow, getZSpan, start, end, scroll]);
-
-
   useEffect(() => {
     if (!clearStageExternalRef) return;
     clearStageExternalRef.current = clearStage;
@@ -1680,29 +1621,15 @@ function LocalZScroller({
       },
       setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
       stopAutoScroll: () => { autoVelRef.current = 0; },
-      stepExpanded: (step) => {
-        // allow step only when expanded (change this if you want it active always)
-        if (expandedIndexRef.current == null) return;
-
-        const maxIdx = Math.max(0, (planes ?? 1) - 1);
-        const current = centerIndexRef.current ?? 0;
-        const next = Math.max(0, Math.min(maxIdx, current + step));
-
-        snapToIndex(next);
-
-        // switch expanded card immediately and briefly lock rotation/scale snap
-        if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
-        if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
-        setExpandedIndex(next);
-      },
-
+      jumpByCards: (n) => jumpByCards(n),
       clearStage,
 
     };
 
     navApiExternalRef.current = api;
     return () => { navApiExternalRef.current = null; };
-  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, setExpandedIndex,snapToIndex ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges]);
 
   useEffect(() => {
     const el = (scroll as any).el as HTMLElement | undefined;
@@ -1940,6 +1867,61 @@ function LocalZScroller({
     }
   });
 
+  // helper: z of an index with current group gaps
+const zOfIndexNow = useCallback((i: number) => {
+  const g = gap ?? 0;
+  let off = 0;
+  if (groupGapsActiveRef.current && (stageGapRef.current ?? 0) > 0) {
+    const map = groupIndexMapRef.current;
+    const gi = map ? map[i] : -1;
+    if (gi >= 0) {
+      const focusG = focusGroupRef.current ?? 0;
+      const delta = Math.max(0, (stageGapRef.current ?? 0) - g);
+      off = (gi - focusG) * delta;
+    }
+  }
+  return -(i * g + off);
+}, [gap]);
+
+// helper: scrollTop for a given z
+const scrollTopForZ = useCallback((z: number) => {
+  const el = (scroll as any).el as HTMLElement | undefined;
+  if (!el) return 0;
+  const { zTop, zBottom } = getZSpan();
+  const pLocal = THREE.MathUtils.clamp((z - zTop) / (zBottom - zTop), 0, 1);
+  const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
+  const max = Math.max(1, el.scrollHeight - el.clientHeight);
+  return pGlobal * max;
+}, [getZSpan, start, end, scroll]);
+
+// ✅ API method: jump exactly N cards and keep expanded synced
+const jumpByCards = useCallback((cards: number) => {
+  const el = (scroll as any).el as HTMLElement | undefined;
+  if (!el || !planes) return;
+
+  const maxIdx = Math.max(0, (planes ?? 1) - 1);
+  const current = centerIndexRef.current ?? 0;
+  const targetIdx = Math.max(0, Math.min(maxIdx, current + cards));
+
+  // compute the exact scrollTop that centers targetIdx
+  const z = zOfIndexNow(targetIdx);
+  const top = scrollTopForZ(z);
+
+  // snap DOM scroll (source of truth) immediately
+  el.scrollTo({ top, behavior: "auto" });
+
+  // pre-lock the center index so visuals don’t “hesitate”
+  (centerIndexRef as any).prev = targetIdx;
+  centerIndexRef.current = targetIdx;
+  navLockRef.current = 2;
+
+  // if expanded, switch the expanded card right away (with a tiny snap lock)
+  if (expandedIndexRef.current != null) {
+    if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
+    if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
+    setExpandedIndex(targetIdx);
+  }
+}, [planes, zOfIndexNow, scrollTopForZ, setExpandedIndex, scroll]);
 
 
   const contextValue = useMemo(
@@ -2176,3 +2158,7 @@ function ElasticKnob({
     </div>
   );
 }
+
+
+
+
