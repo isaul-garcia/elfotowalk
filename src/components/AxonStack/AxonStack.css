@@ -222,7 +222,7 @@ h3 {
   background: transparent;
   border: none;
   cursor: pointer;
-  touch-action: manipulation;
+  touch-action: touch;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }

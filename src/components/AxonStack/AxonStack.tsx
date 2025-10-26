@@ -164,7 +164,6 @@ type StackNavApi = {
   clearStage: () => void;
   setAutoScroll: (velPxPerSec: number) => void; // positive = scroll down/forward
   stopAutoScroll: () => void;
-  jumpByCards: (cards: number) => void;
 };
 
 const StackScrollContext = React.createContext<StackCtx>(null);
@@ -612,15 +611,37 @@ export default function ClickableAxonStackDebug() {
         <div className="axon-expanded">
           <div>
             <div className="axon-expanded__arrows">
-              <button
-                className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.jumpByCards(-3); }}
-              >←</button>
 
-              <button
-                className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => { e.preventDefault(); e.stopPropagation(); navApiRef.current?.jumpByCards(+3); }}
-              >→</button>
+              {isMobile ? (
+                <>
+                  <HoldArrow dir={-1} />
+                  <HoldArrow dir={+1} />
+                </>
+              ) : (
+                <>
+                  <button
+                    className="axon-expanded__arrowBtn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+                    }}
+                    aria-label="Previous"
+                  >
+                    ←
+                  </button>
+                  <button
+                    className="axon-expanded__arrowBtn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+                    }}
+                    aria-label="Next"
+                  >
+                    →
+                  </button>
+                </>
+              )}
+
             </div>
 
             <div className="axon-expanded__name">{expandedName.name}</div>{expandedInfo && (
@@ -1621,14 +1642,12 @@ function LocalZScroller({
       },
       setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
       stopAutoScroll: () => { autoVelRef.current = 0; },
-      jumpByCards: (n) => jumpByCards(n),
       clearStage,
 
     };
 
     navApiExternalRef.current = api;
     return () => { navApiExternalRef.current = null; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges]);
 
   useEffect(() => {
@@ -1867,61 +1886,6 @@ function LocalZScroller({
     }
   });
 
-  // helper: z of an index with current group gaps
-const zOfIndexNow = useCallback((i: number) => {
-  const g = gap ?? 0;
-  let off = 0;
-  if (groupGapsActiveRef.current && (stageGapRef.current ?? 0) > 0) {
-    const map = groupIndexMapRef.current;
-    const gi = map ? map[i] : -1;
-    if (gi >= 0) {
-      const focusG = focusGroupRef.current ?? 0;
-      const delta = Math.max(0, (stageGapRef.current ?? 0) - g);
-      off = (gi - focusG) * delta;
-    }
-  }
-  return -(i * g + off);
-}, [gap]);
-
-// helper: scrollTop for a given z
-const scrollTopForZ = useCallback((z: number) => {
-  const el = (scroll as any).el as HTMLElement | undefined;
-  if (!el) return 0;
-  const { zTop, zBottom } = getZSpan();
-  const pLocal = THREE.MathUtils.clamp((z - zTop) / (zBottom - zTop), 0, 1);
-  const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
-  const max = Math.max(1, el.scrollHeight - el.clientHeight);
-  return pGlobal * max;
-}, [getZSpan, start, end, scroll]);
-
-// ✅ API method: jump exactly N cards and keep expanded synced
-const jumpByCards = useCallback((cards: number) => {
-  const el = (scroll as any).el as HTMLElement | undefined;
-  if (!el || !planes) return;
-
-  const maxIdx = Math.max(0, (planes ?? 1) - 1);
-  const current = centerIndexRef.current ?? 0;
-  const targetIdx = Math.max(0, Math.min(maxIdx, current + cards));
-
-  // compute the exact scrollTop that centers targetIdx
-  const z = zOfIndexNow(targetIdx);
-  const top = scrollTopForZ(z);
-
-  // snap DOM scroll (source of truth) immediately
-  el.scrollTo({ top, behavior: "auto" });
-
-  // pre-lock the center index so visuals don’t “hesitate”
-  (centerIndexRef as any).prev = targetIdx;
-  centerIndexRef.current = targetIdx;
-  navLockRef.current = 2;
-
-  // if expanded, switch the expanded card right away (with a tiny snap lock)
-  if (expandedIndexRef.current != null) {
-    if (lastExpandedIndexRef) lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
-    if (expandedSwitchLockRef) expandedSwitchLockRef.current = 4;
-    setExpandedIndex(targetIdx);
-  }
-}, [planes, zOfIndexNow, scrollTopForZ, setExpandedIndex, scroll]);
 
 
   const contextValue = useMemo(
@@ -2033,6 +1997,108 @@ function KeyboardNavigator({ planes }: { planes: number }) {
 
   return null;
 }
+
+function HoldArrow({
+  dir,                    // -1 = previous (←), 1 = next (→)
+  tapJump = 1,            // how many extra keypresses on a quick tap
+  repeatStartMs = 140,    // delay before repeating starts
+  repeatMinMs = 45,       // fastest repeat interval
+  accelerateMs = 800,     // time to accelerate down to repeatMinMs
+}: {
+  dir: -1 | 1;
+  tapJump?: number;
+  repeatStartMs?: number;
+  repeatMinMs?: number;
+  accelerateMs?: number;
+}) {
+  const rafRef = React.useRef<number | null>(null);
+  const runningRef = React.useRef(false);
+  const pressT0Ref = React.useRef(0);
+  const lastFireRef = React.useRef(0);
+  const pointerIdRef = React.useRef<number | null>(null);
+  const btnElRef = React.useRef<HTMLButtonElement | null>(null);
+
+  const fireOnce = React.useCallback(() => {
+    const key = dir < 0 ? "ArrowLeft" : "ArrowRight";
+    window.dispatchEvent(new KeyboardEvent("keydown", { key }));
+  }, [dir]);
+
+  const stop = React.useCallback(() => {
+    runningRef.current = false;
+    if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    // Release pointer capture on the SAME element that captured it
+    if (pointerIdRef.current != null && btnElRef.current) {
+      try { btnElRef.current.releasePointerCapture(pointerIdRef.current); } catch {}
+    }
+    pointerIdRef.current = null;
+  }, []);
+
+  const tick = React.useCallback((t: number) => {
+    if (!runningRef.current) return;
+
+    const elapsed = t - pressT0Ref.current;
+    // Lerp current interval from start → min over accelerateMs
+    const k = Math.min(1, Math.max(0, elapsed / accelerateMs));
+    const curInterval = repeatStartMs + (repeatMinMs - repeatStartMs) * k;
+
+    if (t - lastFireRef.current >= curInterval) {
+      lastFireRef.current = t;
+      fireOnce();
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }, [accelerateMs, repeatMinMs, repeatStartMs, fireOnce]);
+
+  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    btnElRef.current = e.currentTarget;
+    // Capture so the press isn’t stolen by scroll
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    pointerIdRef.current = e.pointerId;
+
+    runningRef.current = true;
+    pressT0Ref.current = performance.now();
+    lastFireRef.current = pressT0Ref.current; // first repeat waits repeatStartMs
+
+    // Immediate “press” to feel snappy
+    fireOnce();
+
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  const onPointerUpOrCancel = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const heldMs = performance.now() - pressT0Ref.current;
+    const wasTap = heldMs < repeatStartMs * 0.85;
+
+    stop();
+
+    // Optional: small boost for very short taps
+    if (wasTap && tapJump > 1) {
+      for (let i = 1; i < tapJump; i++) fireOnce();
+    }
+  };
+
+  React.useEffect(() => () => stop(), [stop]);
+
+  return (
+    <button
+      type="button"
+      ref={btnElRef}
+      className="axon-expanded__arrowBtn"
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUpOrCancel}
+      onPointerCancel={onPointerUpOrCancel}
+      onPointerLeave={onPointerUpOrCancel}
+    >
+      {dir < 0 ? "←" : "→"}
+    </button>
+  );
+}
+
 
 function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = React.useState(false);
@@ -2158,7 +2224,6 @@ function ElasticKnob({
     </div>
   );
 }
-
 
 
 
