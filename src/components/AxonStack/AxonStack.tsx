@@ -613,8 +613,8 @@ export default function ClickableAxonStackDebug() {
         <div className="axon-expanded">
           <div>
             <div className="axon-expanded__arrows">
-              <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(-1)}>-</button>
-              <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(+1)}>+</button>
+              <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(-1)}>←</button>
+              <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(+1)}>→</button>
 
             </div>
 
