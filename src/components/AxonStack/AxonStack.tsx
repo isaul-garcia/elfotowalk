@@ -613,17 +613,8 @@ export default function ClickableAxonStackDebug() {
         <div className="axon-expanded">
           <div>
             <div className="axon-expanded__arrows">
-              <button
-                className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture?.(e.pointerId); navApiRef.current?.stepExpanded(-1); }}
-                onPointerUp={(e) => e.currentTarget.releasePointerCapture?.(e.pointerId)}
-              >←</button>
-
-              <button
-                className="axon-expanded__arrowBtn"
-                onPointerDown={(e) => { e.preventDefault(); e.currentTarget.setPointerCapture?.(e.pointerId); navApiRef.current?.stepExpanded(+1); }}
-                onPointerUp={(e) => e.currentTarget.releasePointerCapture?.(e.pointerId)}
-              >→</button>
+              <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(-1)}>-</button>
+              <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(+1)}>+</button>
             </div>
 
             <div className="axon-expanded__name">{expandedName.name}</div>{expandedInfo && (
