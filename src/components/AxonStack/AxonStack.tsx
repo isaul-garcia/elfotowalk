@@ -615,6 +615,7 @@ export default function ClickableAxonStackDebug() {
             <div className="axon-expanded__arrows">
               <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(-1)}>-</button>
               <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(+1)}>+</button>
+
             </div>
 
             <div className="axon-expanded__name">{expandedName.name}</div>{expandedInfo && (
@@ -1355,12 +1356,7 @@ function LocalZScroller({
       const el = (scroll as any).el as HTMLElement | undefined;
       if (!el) return;
       const max = Math.max(1, el.scrollHeight - el.clientHeight);
-      const target = pGlobal * max;
-      
-      // Do both, in this order:
-      el.scrollTo?.({ top: target, behavior: "auto" });
-      // iOS sometimes ignores/defers scrollTo — force it:
-      el.scrollTop = target;
+      el.scrollTo({ top: pGlobal * max, behavior: "auto" });
     },
     [planes, gap, start, end, scroll, stageOffsetForIndex, getZSpan]
   );
@@ -1412,7 +1408,7 @@ function LocalZScroller({
 
       // Sync DOM scroll to new mapping so camera/lift and index stay aligned
       centerOn(keepIndex);
-      navLockRef.current = 6; // avoid jitter for a couple frames
+      navLockRef.current = 2; // avoid jitter for a couple frames
     }
   }, [gap, centerOn]);
 
@@ -1543,6 +1539,60 @@ function LocalZScroller({
     };
   }, [scroll]);
 
+
+// compute Z of an index with current gaps
+const zOfIndexNow = (i: number) => {
+  const g = gap ?? 0;
+  let off = 0;
+  if (groupGapsActiveRef.current && (stageGapRef.current ?? 0) > 0) {
+    const map = groupIndexMapRef.current;
+    const gi = map ? map[i] : -1;
+    if (gi >= 0) {
+      const focusG = focusGroupRef.current ?? 0;
+      const delta = Math.max(0, (stageGapRef.current ?? 0) - g);
+      off = (gi - focusG) * delta;
+    }
+  }
+  return -(i * g + off);
+};
+
+// 1) Jump stack transform immediately to an index (bypass DOM scroll)
+const jumpToIndexImmediate = (i: number) => {
+  const maxIdx = Math.max(0, (planes ?? 1) - 1);
+  const idx = Math.max(0, Math.min(maxIdx, i));
+  const z = zOfIndexNow(idx);
+
+  // write the actual transform
+  zSmoothed.current = z;
+  zRef.current = z;
+  if (ref.current) ref.current.position.set(0, 0, z);
+
+  // keep center in sync & hold it for a few frames
+  (centerIndexRef as any).prev = idx;
+  centerIndexRef.current = idx;
+  navLockRef.current = 6; // longer on mobile
+};
+
+// 2) (Optional) sync DOM scroll to current Z, so ScrollControls' offset matches
+const syncDomScrollToCurrentZ = () => {
+  const el = (scroll as any).el as HTMLElement | undefined;
+  if (!el) return;
+
+  const { zTop, zBottom } = getZSpan();
+  const pLocal = THREE.MathUtils.clamp(
+    (zSmoothed.current - zTop) / (zBottom - zTop),
+    0, 1
+  );
+  const pGlobal = THREE.MathUtils.clamp(start + pLocal * (end - start), 0, 1);
+  const max = Math.max(1, el.scrollHeight - el.clientHeight);
+  const target = pGlobal * max;
+
+  // best-effort: different code paths for iOS quirks
+  el.scrollTo?.({ top: target, behavior: "auto" });
+  el.scrollTop = target;
+};
+
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (expandedIndexRef.current == null) return;
@@ -1555,30 +1605,29 @@ function LocalZScroller({
     window.addEventListener("keydown", onKey, { passive: false });
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  
 
   const stepExpanded = useCallback((step: -1 | 1) => {
     if ((expandedIndexRef.current ?? null) == null) return;
-
+  
     const maxIdx = Math.max(0, (planes ?? 1) - 1);
     const current = centerIndexRef.current ?? 0;
     const next = Math.max(0, Math.min(maxIdx, current + step));
-
-    // keep center index in sync immediately (prevents jitter)
-    (centerIndexRef as any).prev = next;
-    centerIndexRef.current = next;
-    navLockRef.current = 2;
-
-    // scroll to new center (works in both modes)
-    centerOn(next);
-
-    // help the expanded switch snap nicely
+  
+    // 1) Move the stack immediately (this is the key change)
+    jumpToIndexImmediate(next);
+  
+    // 2) Help the expanded switch snap nicely
     lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
     expandedSwitchLockRef.current = 4;
-
-    // switch expanded image
+  
+    // 3) Flip expanded to next
     setExpandedIndex(next);
-  }, [centerOn, planes, setExpandedIndex]);
+  
+    // 4) Optionally sync DOM scroll afterward (non-critical on iOS)
+    setTimeout(syncDomScrollToCurrentZ, 0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpToIndexImmediate, setExpandedIndex, planes]);
+  
 
 
   useEffect(() => {
@@ -1889,7 +1938,6 @@ function LocalZScroller({
       }
     }
   });
-
 
 
   const contextValue = useMemo(

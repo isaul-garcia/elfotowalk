@@ -199,6 +199,7 @@ h3 {
   pointer-events: auto;
   user-select: text;
   display: flex;
+  z-index: 9999;
 }
 .axon-expanded > div {
   padding: 0;
@@ -222,7 +223,7 @@ h3 {
   background: transparent;
   border: none;
   cursor: pointer;
-  touch-action: none;
+  touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
