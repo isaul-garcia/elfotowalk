@@ -1355,7 +1355,12 @@ function LocalZScroller({
       const el = (scroll as any).el as HTMLElement | undefined;
       if (!el) return;
       const max = Math.max(1, el.scrollHeight - el.clientHeight);
-      el.scrollTo({ top: pGlobal * max, behavior: "auto" });
+      const target = pGlobal * max;
+      
+      // Do both, in this order:
+      el.scrollTo?.({ top: target, behavior: "auto" });
+      // iOS sometimes ignores/defers scrollTo — force it:
+      el.scrollTop = target;
     },
     [planes, gap, start, end, scroll, stageOffsetForIndex, getZSpan]
   );
@@ -1407,7 +1412,7 @@ function LocalZScroller({
 
       // Sync DOM scroll to new mapping so camera/lift and index stay aligned
       centerOn(keepIndex);
-      navLockRef.current = 2; // avoid jitter for a couple frames
+      navLockRef.current = 6; // avoid jitter for a couple frames
     }
   }, [gap, centerOn]);
 
@@ -1550,6 +1555,7 @@ function LocalZScroller({
     window.addEventListener("keydown", onKey, { passive: false });
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+  
 
   const stepExpanded = useCallback((step: -1 | 1) => {
     if ((expandedIndexRef.current ?? null) == null) return;
