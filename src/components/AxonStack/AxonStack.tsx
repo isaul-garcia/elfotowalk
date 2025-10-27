@@ -31,7 +31,7 @@ const CARD_RETURN_SPD = 0.18;
 const CARD_SCALE_EXPANDED_DESKTOP_LANDSCAPE = 4.25;
 const CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT = 3.75;
 const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.5;
-const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 2;
+const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 2.15;
 const CARD_OFF_SCREEN_X = 1.0;
 const CARD_OFF_SCREEN_Y = -0.75;
 const CARD_CENTER_NUDGE_X = -1.0;
@@ -154,6 +154,8 @@ type StackCtx = {
   groupGapsActiveRef?: React.MutableRefObject<boolean>;
   focusGroupRef?: React.MutableRefObject<number>;
   groupNamesRef?: React.MutableRefObject<string[] | null>;
+  stepExpandedDesktop?: (step: -1 | 1) => void;
+  stepExpandedMobile?: (step: -1 | 1) => void;
   stepExpanded?: (step: -1 | 1) => void;
 } | null;
 
@@ -165,6 +167,8 @@ type StackNavApi = {
   clearStage: () => void;
   setAutoScroll: (velPxPerSec: number) => void; // positive = scroll down/forward
   stopAutoScroll: () => void;
+  stepExpandedDesktop?: (step: -1 | 1) => void;
+  stepExpandedMobile?: (step: -1 | 1) => void;
   stepExpanded: (step: -1 | 1) => void;
 };
 
@@ -455,6 +459,42 @@ export default function ClickableAxonStackDebug() {
     [isMobile, namesOpen]
   );
 
+  function usePressHold(onTick: () => void, firstDelay = 300, repeatEvery = 110) {
+    const tRef = React.useRef<number | null>(null);
+    const runningRef = React.useRef(false);
+
+    const stop = React.useCallback(() => {
+      runningRef.current = false;
+      if (tRef.current != null) { window.clearTimeout(tRef.current); tRef.current = null; }
+    }, []);
+
+    const start = React.useCallback(() => {
+      stop();
+      runningRef.current = true;
+      onTick(); // single step instantly
+      const loop = () => {
+        if (!runningRef.current) return;
+        onTick();
+        tRef.current = window.setTimeout(loop, repeatEvery);
+      };
+      tRef.current = window.setTimeout(loop, firstDelay);
+    }, [onTick, repeatEvery, stop, firstDelay]);
+
+    React.useEffect(() => stop, [stop]);
+    return { start, stop };
+  }
+
+  const prevDesktop = useCallback(() => navApiRef.current?.stepExpandedDesktop?.(-1), []);
+  const nextDesktop = useCallback(() => navApiRef.current?.stepExpandedDesktop?.(+1), []);
+  const prevMobile = useCallback(() => navApiRef.current?.stepExpandedMobile?.(-1), []);
+  const nextMobile = useCallback(() => navApiRef.current?.stepExpandedMobile?.(+1), []);
+
+  const prevPH_Desktop = usePressHold(prevDesktop);
+  const nextPH_Desktop = usePressHold(nextDesktop);
+  const prevPH_Mobile = usePressHold(prevMobile);
+  const nextPH_Mobile = usePressHold(nextMobile);
+
+
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
       <LoaderOverlay onDone={() => { if (!fired.current) { fired.current = true; startGapIntro(600); } }} />
@@ -612,11 +652,55 @@ export default function ClickableAxonStackDebug() {
       {expandedName && (
         <div className="axon-expanded">
           <div>
-            <div className="axon-expanded__arrows">
-              <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(-1)}>←</button>
-              <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(+1)}>→</button>
 
-            </div>
+            {isMobile && (
+              <div className="axon-expanded__arrows">
+                <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(-1)}>←</button>
+                <button className="axon-expanded__arrowBtn" onClick={() => navApiRef.current?.stepExpanded(+1)}>→</button>
+              </div>
+            )}
+
+            {/* DESKTOP ARROWS */}
+            {!isMobile && (
+             <div className="axon-expanded__arrows axon-expanded__arrows--desktop">
+             <button
+               className="axon-expanded__arrowBtn"
+               aria-label="Previous"
+               onClick={(e) => {
+                 e.stopPropagation();
+                 // mimic pressing the Left Arrow
+                 window.dispatchEvent(
+                   new KeyboardEvent("keydown", {
+                     key: "ArrowLeft",
+                     code: "ArrowLeft",
+                     bubbles: true,
+                   })
+                 );
+               }}
+             >
+               ←
+             </button>
+           
+             <button
+               className="axon-expanded__arrowBtn"
+               aria-label="Next"
+               onClick={(e) => {
+                 e.stopPropagation();
+                 // mimic pressing the Right Arrow
+                 window.dispatchEvent(
+                   new KeyboardEvent("keydown", {
+                     key: "ArrowRight",
+                     code: "ArrowRight",
+                     bubbles: true,
+                   })
+                 );
+               }}
+             >
+               →
+             </button>
+           </div>
+           
+            )}
 
             <div className="axon-expanded__name">{expandedName.name}</div>{expandedInfo && (
               <div className="axon-expanded__count">
@@ -1561,18 +1645,18 @@ function LocalZScroller({
     const maxIdx = Math.max(0, (planes ?? 1) - 1);
     const idx = Math.max(0, Math.min(maxIdx, i));
     const z = zOfIndexNow(idx);
-  
+
     zSmoothed.current = z;
     zRef.current = z;
     ref.current?.position.set(0, 0, z);
-  
+
     (centerIndexRef as any).prev = idx;
     centerIndexRef.current = idx;
-  
+
     navLockRef.current = 8;      // a few frames of center “stickiness”
     jumpHoldRef.current = 3;     // NEW: hold the physics from pulling back
   };
-  
+
 
   // 2) (Optional) sync DOM scroll to current Z, so ScrollControls' offset matches
   const syncDomScrollToCurrentZ = () => {
@@ -1608,30 +1692,30 @@ function LocalZScroller({
   }, []);
 
   const syncDomScrollSoon = () =>
-    requestAnimationFrame(() => requestAnimationFrame(syncDomScrollToCurrentZ));  
+    requestAnimationFrame(() => requestAnimationFrame(syncDomScrollToCurrentZ));
 
 
   const stepExpanded = useCallback((step: -1 | 1) => {
     if ((expandedIndexRef.current ?? null) == null) return;
-  
+
     const maxIdx = Math.max(0, (planes ?? 1) - 1);
     const current = centerIndexRef.current ?? 0;
     const next = Math.max(0, Math.min(maxIdx, current + step));
-  
+
     // 1) Jump stack immediately
     jumpToIndexImmediate(next);
-  
+
     // 2) Help the expanded switch snap nicely
     lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
     expandedSwitchLockRef.current = 4;
-  
+
     // 3) Flip expanded to next
     setExpandedIndex(next);
-  
+
     // 4) Sync DOM scroll after layout has caught up
     syncDomScrollSoon();
   }, [jumpToIndexImmediate, setExpandedIndex]);
-  
+
   useEffect(() => {
     if (!navApiExternalRef) return;
 
@@ -1697,6 +1781,7 @@ function LocalZScroller({
       setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
       stopAutoScroll: () => { autoVelRef.current = 0; },
       clearStage,
+      stepExpandedDesktop,
       stepExpanded,
     };
 
@@ -1949,6 +2034,27 @@ function LocalZScroller({
     }
   });
 
+  const stepExpandedDesktop = useCallback((step: -1 | 1) => {
+    if ((expandedIndexRef.current ?? null) == null) return;
+
+    const maxIdx = Math.max(0, (planes ?? 1) - 1);
+    const current = centerIndexRef.current ?? 0;
+    const next = Math.max(0, Math.min(maxIdx, current + step));
+
+    // keep center in sync immediately to avoid jitter
+    (centerIndexRef as any).prev = next;
+    centerIndexRef.current = next;
+    navLockRef.current = 2;
+
+    // desktop route: let DOM scroll drive z (the “old way”)
+    centerOn(next);
+
+    // snap the expanded switch
+    lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
+    expandedSwitchLockRef.current = 4;
+    setExpandedIndex(next);
+  }, [planes, centerOn, setExpandedIndex]);
+
 
   const contextValue = useMemo(
     () => ({
@@ -1974,7 +2080,8 @@ function LocalZScroller({
       groupGapsActiveRef,
       focusGroupRef,
       groupNamesRef,
-      stepExpanded,
+      stepExpandedDesktop,
+      stepExpanded: isMobile ? stepExpanded : stepExpandedDesktop,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [gap, centerOn, stageAt, clearStage, expandedIndex]
@@ -2147,10 +2254,3 @@ function ElasticKnob({
     </div>
   );
 }
-
-
-
-
-
-
-
