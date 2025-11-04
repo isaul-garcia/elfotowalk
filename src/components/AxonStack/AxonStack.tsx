@@ -33,9 +33,11 @@ const CARD_SCALE_EXPANDED_DESKTOP_PORTRAIT = 3.75;
 const CARD_SCALE_EXPANDED_MOBILE_LANDSCAPE = 1.5;
 const CARD_SCALE_EXPANDED_MOBILE_PORTRAIT = 2.15;
 const CARD_OFF_SCREEN_X = 1.0;
-const CARD_OFF_SCREEN_Y = -0.75;
 const CARD_CENTER_NUDGE_X = -1.0;
-const CARD_CENTER_NUDGE_Y = 0.6;
+const CARD_OFF_SCREEN_Y = -0.75;
+const CARD_CENTER_NUDGE_Y_DESKTOP = 0.65;
+const CARD_CENTER_NUDGE_Y_MOBILE = 1.5;
+// const CARD_CENTER_NUDGE_Y = 0.6;
 const CARD_STAGE_GAP_ABS = 2;
 const EXPANDED_RENDER_ORDER = 1_000_000;
 const STAGE_GAP_WHEN_STAGED = 2;
@@ -155,7 +157,6 @@ type StackCtx = {
   focusGroupRef?: React.MutableRefObject<number>;
   groupNamesRef?: React.MutableRefObject<string[] | null>;
   stepExpandedDesktop?: (step: -1 | 1) => void;
-  stepExpandedMobile?: (step: -1 | 1) => void;
   stepExpanded?: (step: -1 | 1) => void;
 } | null;
 
@@ -168,7 +169,6 @@ type StackNavApi = {
   setAutoScroll: (velPxPerSec: number) => void; // positive = scroll down/forward
   stopAutoScroll: () => void;
   stepExpandedDesktop?: (step: -1 | 1) => void;
-  stepExpandedMobile?: (step: -1 | 1) => void;
   stepExpanded: (step: -1 | 1) => void;
 };
 
@@ -459,42 +459,6 @@ export default function ClickableAxonStackDebug() {
     [isMobile, namesOpen]
   );
 
-  function usePressHold(onTick: () => void, firstDelay = 300, repeatEvery = 110) {
-    const tRef = React.useRef<number | null>(null);
-    const runningRef = React.useRef(false);
-
-    const stop = React.useCallback(() => {
-      runningRef.current = false;
-      if (tRef.current != null) { window.clearTimeout(tRef.current); tRef.current = null; }
-    }, []);
-
-    const start = React.useCallback(() => {
-      stop();
-      runningRef.current = true;
-      onTick(); // single step instantly
-      const loop = () => {
-        if (!runningRef.current) return;
-        onTick();
-        tRef.current = window.setTimeout(loop, repeatEvery);
-      };
-      tRef.current = window.setTimeout(loop, firstDelay);
-    }, [onTick, repeatEvery, stop, firstDelay]);
-
-    React.useEffect(() => stop, [stop]);
-    return { start, stop };
-  }
-
-  const prevDesktop = useCallback(() => navApiRef.current?.stepExpandedDesktop?.(-1), []);
-  const nextDesktop = useCallback(() => navApiRef.current?.stepExpandedDesktop?.(+1), []);
-  const prevMobile = useCallback(() => navApiRef.current?.stepExpandedMobile?.(-1), []);
-  const nextMobile = useCallback(() => navApiRef.current?.stepExpandedMobile?.(+1), []);
-
-  const prevPH_Desktop = usePressHold(prevDesktop);
-  const nextPH_Desktop = usePressHold(nextDesktop);
-  const prevPH_Mobile = usePressHold(prevMobile);
-  const nextPH_Mobile = usePressHold(nextMobile);
-
-
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
       <LoaderOverlay onDone={() => { if (!fired.current) { fired.current = true; startGapIntro(600); } }} />
@@ -590,7 +554,9 @@ export default function ClickableAxonStackDebug() {
             className={`axon-info ${infoOpen ? "is-open" : ""}`}
           >
             <span>
-              hola this is info
+              <p>Bienvenidos al archivo oficial de El Fotowalk 003: PONCE.</p>
+              <p>Aquí compartimos muchas de las fotos tomadas por ustedes. Mientras mirábamos estas fotos sentimos que pudimos conocer a cada uno de ustedes un poco más. Gracias por siempre llegarle y hacer que El Fotowalk sea un evento especial para la comunidad creativa de Puerto Rico.</p>
+              <p>att. andrés y portu</p>
             </span>
           </div>
         </>
@@ -637,7 +603,7 @@ export default function ClickableAxonStackDebug() {
       </div>
 
       {/* LOGO (bottom-center) */}
-      <div className="axon-logo">
+      <div className="axon-logo sticky-bottom">
         <img src={shortLogo} alt="Logo" />
       </div>
 
@@ -650,7 +616,7 @@ export default function ClickableAxonStackDebug() {
 
       {/* EXPANDED OVERLAY */}
       {expandedName && (
-        <div className="axon-expanded">
+        <div className="axon-expanded sticky-bottom">
           <div>
 
             {isMobile && (
@@ -978,7 +944,8 @@ function Card({
       const offX = tmpRight.clone().multiplyScalar(CARD_OFF_SCREEN_X);
       const offY = tmpUp.clone().multiplyScalar(CARD_OFF_SCREEN_Y);
       const nudgeX = tmpRight.clone().multiplyScalar(CARD_CENTER_NUDGE_X);
-      const nudgeY = tmpUp.clone().multiplyScalar(CARD_CENTER_NUDGE_Y);
+      const centerNudgeY = isMobile ? CARD_CENTER_NUDGE_Y_MOBILE : CARD_CENTER_NUDGE_Y_DESKTOP;
+      const nudgeY = tmpUp.clone().multiplyScalar(centerNudgeY);
 
       tmpWorld.set(0, 0, 0).add(pull).add(offX).add(offY).add(nudgeX).add(nudgeY);
       parent.worldToLocal(tmpLocal.copy(tmpWorld));

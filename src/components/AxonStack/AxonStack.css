@@ -2,6 +2,7 @@
 
 body {
   margin: 0 !important;
+  min-height: 100dvh;
 }
 span,
 a,
@@ -443,6 +444,7 @@ h3 {
 }
 .axon-info > span {
   max-width: 60ch;
+  padding: 0 10vw;
 }
 .axon-knob {
   position: absolute;
@@ -488,6 +490,18 @@ h3 {
   color: #555;
   pointer-events: none;
 }
+
+.sticky-bottom {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0);
+  /* your styles */
+  background: #fff;
+  /* if you want a little breathing room above the bar: */
+  padding-bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
+}
+
 
 /* ── Names as bottom sheet on mobile ───────────────────── */
 @media (max-width: 768px) {
