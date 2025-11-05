@@ -554,8 +554,8 @@ export default function ClickableAxonStackDebug() {
             className={`axon-info ${infoOpen ? "is-open" : ""}`}
           >
             <span>
-              <p>Bienvenidos al archivo oficial de El Fotowalk 003: PONCE.</p>
-              <p>Aquí compartimos muchas de las fotos tomadas por ustedes. Mientras mirábamos estas fotos sentimos que pudimos conocer a cada uno de ustedes un poco más. Gracias por siempre llegarle y hacer que El Fotowalk sea un evento especial para la comunidad creativa de Puerto Rico.</p>
+              <p>Bienvenidos al archivo oficial de<br></br>El Fotowalk 003: PONCE.</p>
+              <p>Aquí compartimos muchas de las fotos que capturaron. Mientras mirábamos estas fotos sentimos que pudimos conocer a cada uno de ustedes un poco más. Gracias por siempre llegarle y hacer que El Fotowalk sea un evento especial para la comunidad creativa de Puerto Rico.</p>
               <p>att. andrés y portu</p>
             </span>
           </div>
