@@ -496,9 +496,6 @@ h3 {
   left: 0;
   right: 0;
   bottom: env(safe-area-inset-bottom, 0);
-  /* your styles */
-  background: #fff;
-  /* if you want a little breathing room above the bar: */
   padding-bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
 }
 
