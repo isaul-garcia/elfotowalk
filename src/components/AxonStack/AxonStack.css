@@ -491,17 +491,16 @@ h3 {
   pointer-events: none;
 }
 
-.sticky-bottom {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: env(safe-area-inset-bottom, 0);
-  padding-bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
-}
-
 
 /* ── Names as bottom sheet on mobile ───────────────────── */
 @media (max-width: 768px) {
+  .sticky-bottom {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: env(safe-area-inset-bottom, 0);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0) + 12px);
+  }
   /* turn the existing panel into a sheet */
   .axon-names {
     position: fixed;
