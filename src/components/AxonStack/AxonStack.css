@@ -112,6 +112,10 @@ h3 {
 .axon-names__btn:hover {
   color: #000;
 }
+.axon-names__btn.is-knob-hover:not(.is-active) {
+  color: #c20000;
+  font-weight: 500;
+}
 .axon-names__btn.is-active {
   font-weight: 600;
   color: #000;
@@ -489,6 +493,49 @@ h3 {
   font-size: 12px;
   color: #555;
   pointer-events: none;
+}
+
+.axon-knob-connect {
+  position: absolute;
+  left: 24px;
+  bottom: 24px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.axon-knob-connect button {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.8);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-family: "Figtree", sans-serif;
+  cursor: pointer;
+  font-size: 14px;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 6%);
+  backdrop-filter: blur(6px);
+}
+
+.axon-knob-connect button.is-connected {
+  background: #000;
+  color: #fff;
+  box-shadow: 0 10px 25px rgb(0 0 0 / 16%);
+}
+
+.axon-knob-connect button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.axon-knob-connect__status {
+  font-size: 12px;
+  color: #555;
+  max-width: 240px;
+  line-height: 1.35;
+  text-align: left;
 }
 
 /* ── Names as bottom sheet on mobile ───────────────────── */

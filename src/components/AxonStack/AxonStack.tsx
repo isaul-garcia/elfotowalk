@@ -12,6 +12,7 @@ import fotowalkLogo from "../../assets/EF3_TYPE.png";
 import shortLogo from "../../assets/endmarks_short_logo.png";
 import LoaderOverlay from "../LoaderOverlay/LoaderOverlay";
 import { wireLoadingGate } from "../LoaderOverlay/LoadingGate";
+import { useKnobSerial } from "../../hooks/useKnobSerial";
 
 // ── DEBUG TEST KNOBS ─────────────────────────────────────────
 const TEST = {
@@ -165,6 +166,7 @@ type StackNavApi = {
   goToAndStage: (index: number, gapAbs?: number) => void;
   goToRangeAndStage: (start: number, end: number, gapAbs?: number) => void; // NEW
   goToGroupAndStage: (start: number, end: number, gapAbs?: number) => void;
+  nudgeDomScroll?: (deltaPx: number) => void;
   clearStage: () => void;
   setAutoScroll: (velPxPerSec: number) => void; // positive = scroll down/forward
   stopAutoScroll: () => void;
@@ -209,6 +211,8 @@ export default function ClickableAxonStackDebug() {
 
   const namesContainerRef = useRef<HTMLDivElement>(null);
   const namesListRef = useRef<HTMLDivElement>(null);
+  const nameButtonRefs = useRef<HTMLButtonElement[]>([]);
+  const [knobHoverIdx, setKnobHoverIdx] = useState(0);
 
   useEffect(() => {
     const el = namesListRef.current;
@@ -409,6 +413,41 @@ export default function ClickableAxonStackDebug() {
 
   const introActive = gapAnimT < 0.999;
   const fired = useRef(false);
+  const clampKnobIdx = useCallback(
+    (i: number) => Math.max(0, Math.min(ANCHORS.length - 1, i)),
+    [ANCHORS.length]
+  );
+
+  const ensureKnobHoverVisible = useCallback(
+    (idx: number) => {
+      const listEl = namesListRef.current;
+      const btn = nameButtonRefs.current[idx];
+      if (!listEl || !btn) return;
+
+      const itemH = btn.offsetHeight || 24;
+      const pad = itemH * 3; // keep at least 3 items visible below
+
+      const currentTop = listEl.scrollTop;
+      const currentBottom = currentTop + listEl.clientHeight;
+      const btnTop = btn.offsetTop;
+      const btnBottom = btnTop + btn.offsetHeight;
+
+      if (btnBottom > currentBottom - pad) {
+        const target = btnBottom - (listEl.clientHeight - pad);
+        const top = Math.min(listEl.scrollHeight - listEl.clientHeight, Math.max(0, target));
+        listEl.scrollTo({ top, behavior: "smooth" });
+      } else if (btnTop < currentTop + itemH) {
+        const target = btnTop - itemH;
+        const top = Math.max(0, target);
+        listEl.scrollTo({ top, behavior: "smooth" });
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    setKnobHoverIdx((prev) => clampKnobIdx(prev));
+  }, [clampKnobIdx]);
 
   const selectGroup = useCallback(
     (start: number, end: number) => {
@@ -458,6 +497,46 @@ export default function ClickableAxonStackDebug() {
     },
     [isMobile, namesOpen]
   );
+
+  const handleKnobRotate = useCallback(
+    (delta: number) => {
+      setKnobHoverIdx((prev) => {
+        const next = clampKnobIdx(prev + delta);
+        ensureKnobHoverVisible(next);
+        return next;
+      });
+    },
+    [clampKnobIdx, ensureKnobHoverVisible]
+  );
+
+  const handleKnobClick = useCallback(() => {
+    const btn = nameButtonRefs.current[knobHoverIdx];
+    if (btn) {
+      btn.scrollIntoView({ block: "nearest", inline: "nearest" });
+      btn.click();
+      return;
+    }
+    const anchor = ANCHORS[knobHoverIdx];
+    if (!anchor) return;
+    const [start, end] = anchor.indices;
+    selectGroup(start, end);
+  }, [ANCHORS, knobHoverIdx, selectGroup]);
+
+  const handleKnobBtn2 = useCallback(() => {
+    console.log("[knob] BTN2 pressed");
+  }, []);
+
+  const {
+    connect: connectKnob,
+    disconnect: disconnectKnob,
+    isConnected: knobConnected,
+    error: knobError,
+    isSupported: knobSupported,
+  } = useKnobSerial({
+    onRotate: handleKnobRotate,
+    onBtn: handleKnobClick,
+    onBtn2: handleKnobBtn2,
+  });
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
@@ -527,6 +606,25 @@ export default function ClickableAxonStackDebug() {
         {/* {DEBUG && <Stats showPanel={0} className="r3f-stats" />} */}
       </Canvas>
 
+      <div className="axon-knob-connect">
+        <button
+          type="button"
+          className={knobConnected ? "is-connected" : ""}
+          onClick={knobConnected ? disconnectKnob : connectKnob}
+          disabled={!knobSupported}
+        >
+          {knobConnected ? "Disconnect knob" : "Connect knob"}
+        </button>
+        {!knobSupported && (
+          <span className="axon-knob-connect__status">
+            Web Serial is only available in Chrome or Edge.
+          </span>
+        )}
+        {knobError && knobSupported && (
+          <span className="axon-knob-connect__status">{knobError}</span>
+        )}
+      </div>
+
       {/* MOBILE BURGER */}
       {isMobile && expandedIdx === null && (
         <button
@@ -570,13 +668,15 @@ export default function ClickableAxonStackDebug() {
       >
         <div>
           <div ref={namesListRef} className="axon-names__list">
-            {ANCHORS.map((a) => {
+            {ANCHORS.map((a, idx) => {
               const [start, end] = a.indices;
               const active = centeredIdx >= start && centeredIdx <= end;
+              const knobHover = idx === knobHoverIdx;
               return (
                 <button
                   key={a.name}
-                  className={`axon-names__btn ${active ? "is-active" : ""}`}
+                  ref={(el) => { if (el) nameButtonRefs.current[idx] = el; }}
+                  className={`axon-names__btn ${active ? "is-active" : ""} ${knobHover ? "is-knob-hover" : ""}`}
                   onClick={() => selectGroup(start, end)}
                   title={`${a.name} (${start}–${end})`}
                 >
@@ -1661,6 +1761,16 @@ function LocalZScroller({
   const syncDomScrollSoon = () =>
     requestAnimationFrame(() => requestAnimationFrame(syncDomScrollToCurrentZ));
 
+  const nudgeDomScroll = useCallback((deltaPx: number) => {
+    const el = (scroll as any).el as HTMLElement | undefined;
+    if (!el) return;
+    if (expandedIndexRef.current != null) return;
+
+    const max = Math.max(0, el.scrollHeight - el.clientHeight);
+    const next = Math.max(0, Math.min(max, el.scrollTop + deltaPx));
+    el.scrollTop = next;
+  }, [scroll]);
+
 
   const stepExpanded = useCallback((step: -1 | 1) => {
     if ((expandedIndexRef.current ?? null) == null) return;
@@ -1745,6 +1855,7 @@ function LocalZScroller({
         centerOn(s);              // travel first (lift works here)
         navLockRef.current = 2;
       },
+      nudgeDomScroll,
       setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
       stopAutoScroll: () => { autoVelRef.current = 0; },
       clearStage,
@@ -1755,7 +1866,7 @@ function LocalZScroller({
 
     navApiExternalRef.current = api;
     return () => { navApiExternalRef.current = null; };
-  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, stepExpanded]);
+  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, stepExpanded, nudgeDomScroll]);
 
   useEffect(() => {
     const el = (scroll as any).el as HTMLElement | undefined;
