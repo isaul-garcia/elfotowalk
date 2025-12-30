@@ -44,6 +44,11 @@ const EXPANDED_RENDER_ORDER = 1_000_000;
 const STAGE_GAP_WHEN_STAGED = 2;
 const STAGE_GAP_WHEN_EXPANDED = 10;
 const BACKDROP_FADE_SPD = 0.18;
+const KNOB_MAX_PX_PER_SEC = 3600;
+const KNOB_EXPO = 1.25;
+const JOY_CENTER = 512;
+const JOY_RANGE = 512;
+const JOY_DEAD_ZONE = 0.08;
 // ────────────────────────────────────────────────────────────────────────────────
 // Config / Debug
 // ────────────────────────────────────────────────────────────────────────────────
@@ -172,6 +177,7 @@ type StackNavApi = {
   stopAutoScroll: () => void;
   stepExpandedDesktop?: (step: -1 | 1) => void;
   stepExpanded: (step: -1 | 1) => void;
+  expandCentered: () => void;
 };
 
 const StackScrollContext = React.createContext<StackCtx>(null);
@@ -213,6 +219,7 @@ export default function ClickableAxonStackDebug() {
   const namesListRef = useRef<HTMLDivElement>(null);
   const nameButtonRefs = useRef<HTMLButtonElement[]>([]);
   const [knobHoverIdx, setKnobHoverIdx] = useState(0);
+  const knobClickTsRef = useRef<number>(0);
 
   useEffect(() => {
     const el = namesListRef.current;
@@ -500,31 +507,104 @@ export default function ClickableAxonStackDebug() {
 
   const handleKnobRotate = useCallback(
     (delta: number) => {
+      if (expandedIdx !== null) return;
       setKnobHoverIdx((prev) => {
         const next = clampKnobIdx(prev + delta);
         ensureKnobHoverVisible(next);
         return next;
       });
     },
-    [clampKnobIdx, ensureKnobHoverVisible]
+    [clampKnobIdx, ensureKnobHoverVisible, expandedIdx]
   );
 
   const handleKnobClick = useCallback(() => {
+    const now = performance.now();
+    if (now - knobClickTsRef.current < 250) return;
+    knobClickTsRef.current = now;
+
+    const anchor = ANCHORS[knobHoverIdx];
+    if (anchor) {
+      const [start, end] = anchor.indices;
+      const isActive = centeredIdx >= start && centeredIdx <= end;
+
+      if (isActive) {
+        navApiRef.current?.expandCentered();
+        return;
+      }
+    }
+
     const btn = nameButtonRefs.current[knobHoverIdx];
     if (btn) {
       btn.scrollIntoView({ block: "nearest", inline: "nearest" });
       btn.click();
       return;
     }
-    const anchor = ANCHORS[knobHoverIdx];
+
     if (!anchor) return;
     const [start, end] = anchor.indices;
     selectGroup(start, end);
-  }, [ANCHORS, knobHoverIdx, selectGroup]);
+  }, [ANCHORS, centeredIdx, knobHoverIdx, selectGroup]);
+
+  const dispatchArrow = useCallback((dir: "left" | "right") => {
+    const key = dir === "left" ? "ArrowLeft" : "ArrowRight";
+    const code = key;
+    const keyCode = dir === "left" ? 37 : 39;
+
+    const makeEvent = (type: "keydown" | "keyup") => {
+      const ev = new KeyboardEvent(type, {
+        key,
+        code,
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperty(ev, "keyCode", { get: () => keyCode });
+      Object.defineProperty(ev, "which", { get: () => keyCode });
+      Object.defineProperty(ev, "repeat", { get: () => false });
+      return ev;
+    };
+
+    // Dispatch keydown then keyup to mimic a full key press cycle
+    window.dispatchEvent(makeEvent("keydown"));
+    window.dispatchEvent(makeEvent("keyup"));
+  }, []);
 
   const handleKnobBtn2 = useCallback(() => {
-    console.log("[knob] BTN2 pressed");
+    if (expandedIdx == null) return;
+    const now = performance.now();
+    if (now - knobClickTsRef.current < 200) return;
+    knobClickTsRef.current = now;
+    dispatchArrow("left");
+  }, [expandedIdx, dispatchArrow]);
+
+  const handleKnobBtn3 = useCallback(() => {
+    if (expandedIdx == null) return;
+    const now = performance.now();
+    if (now - knobClickTsRef.current < 200) return;
+    knobClickTsRef.current = now;
+    dispatchArrow("right");
+  }, [expandedIdx, dispatchArrow]);
+
+  const joystickToVelocity = useCallback((xRaw: number) => {
+    const n = Math.max(-1, Math.min(1, (xRaw - JOY_CENTER) / JOY_RANGE));
+    if (Math.abs(n) < JOY_DEAD_ZONE) return 0;
+    const scaled = (Math.abs(n) - JOY_DEAD_ZONE) / (1 - JOY_DEAD_ZONE);
+    const shaped = Math.pow(scaled, KNOB_EXPO);
+    return Math.sign(n) * shaped * KNOB_MAX_PX_PER_SEC;
   }, []);
+
+  const handleJoystick = useCallback((xRaw: number) => {
+    if (!navApiRef.current) return;
+    if (expandedIdx !== null) {
+      navApiRef.current.stopAutoScroll();
+      return;
+    }
+    const vel = joystickToVelocity(xRaw);
+    if (vel === 0) {
+      navApiRef.current.stopAutoScroll();
+    } else {
+      navApiRef.current.setAutoScroll(vel);
+    }
+  }, [expandedIdx, joystickToVelocity]);
 
   const {
     connect: connectKnob,
@@ -536,7 +616,15 @@ export default function ClickableAxonStackDebug() {
     onRotate: handleKnobRotate,
     onBtn: handleKnobClick,
     onBtn2: handleKnobBtn2,
+    onBtn3: handleKnobBtn3,
+    onJoy: (x) => handleJoystick(x),
   });
+
+  useEffect(() => {
+    if (!knobConnected) {
+      navApiRef.current?.stopAutoScroll();
+    }
+  }, [knobConnected]);
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100vh" }}>
@@ -707,10 +795,12 @@ export default function ClickableAxonStackDebug() {
         <img src={shortLogo} alt="Logo" />
       </div>
 
-      {isMobile && expandedIdx === null && (
+      {expandedIdx === null && (
         <ElasticKnob
           onVelocity={(pxPerSec) => navApiRef.current?.setAutoScroll(pxPerSec)}
           onRelease={() => navApiRef.current?.stopAutoScroll()}
+          maxPxPerSec={KNOB_MAX_PX_PER_SEC}
+          expo={KNOB_EXPO}
         />
       )}
 
@@ -1855,6 +1945,19 @@ function LocalZScroller({
         centerOn(s);              // travel first (lift works here)
         navLockRef.current = 2;
       },
+      expandCentered: () => {
+        const current = clampIndex(centerIndexRef.current ?? 0);
+        const expandedNow = expandedIndexRef.current ?? null;
+
+        if (expandedNow === current) {
+          setExpandedIndex(null);
+          return;
+        }
+
+        lastExpandedIndexRef.current = expandedNow;
+        expandedSwitchLockRef.current = 4;
+        setExpandedIndex(current);
+      },
       nudgeDomScroll,
       setAutoScroll: (velPxPerSec) => { autoVelRef.current = velPxPerSec; },
       stopAutoScroll: () => { autoVelRef.current = 0; },
@@ -1866,7 +1969,7 @@ function LocalZScroller({
 
     navApiExternalRef.current = api;
     return () => { navApiExternalRef.current = null; };
-  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, stepExpanded, nudgeDomScroll]);
+  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, stepExpanded, nudgeDomScroll, setExpandedIndex]);
 
   useEffect(() => {
     const el = (scroll as any).el as HTMLElement | undefined;

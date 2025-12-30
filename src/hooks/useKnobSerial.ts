@@ -20,6 +20,9 @@ type Handlers = {
   onRotate?: (delta: number) => void;
   onBtn?: () => void;
   onBtn2?: () => void;
+  onBtn3?: () => void;
+  onJoy?: (x: number, y: number) => void;
+  onJoyBtn?: () => void;
 };
 
 const BAUD_RATE = 115200;
@@ -51,15 +54,34 @@ const makeLineStream = (readable: ReadableStream<Uint8Array>) => {
     );
 };
 
-export function useKnobSerial({ onRotate, onBtn, onBtn2 }: Handlers = {}) {
+export function useKnobSerial({
+  onRotate,
+  onBtn,
+  onBtn2,
+  onBtn3,
+  onJoy,
+  onJoyBtn,
+}: Handlers = {}) {
   const [angle, setAngle] = React.useState(0);
   const [isConnected, setIsConnected] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const portRef = React.useRef<SerialPortLike | null>(null);
   const readerRef =
     React.useRef<ReadableStreamDefaultReader<string> | null>(null);
+  const handlersRef = React.useRef<Handlers>({
+    onRotate,
+    onBtn,
+    onBtn2,
+    onBtn3,
+    onJoy,
+    onJoyBtn,
+  });
 
   const supportsSerial = React.useMemo(hasSerial, []);
+
+  React.useEffect(() => {
+    handlersRef.current = { onRotate, onBtn, onBtn2, onBtn3, onJoy, onJoyBtn };
+  }, [onRotate, onBtn, onBtn2, onBtn3, onJoy, onJoyBtn]);
 
   const cleanupReader = React.useCallback(async () => {
     if (readerRef.current) {
@@ -94,6 +116,7 @@ export function useKnobSerial({ onRotate, onBtn, onBtn2 }: Handlers = {}) {
 
   const handleLine = React.useCallback(
     (line: string) => {
+      const { onRotate, onBtn, onBtn2, onBtn3, onJoy, onJoyBtn } = handlersRef.current;
       if (!line) return;
       if (line.startsWith("ROT:")) {
         const raw = line.split(":")[1] ?? "";
@@ -102,6 +125,25 @@ export function useKnobSerial({ onRotate, onBtn, onBtn2 }: Handlers = {}) {
           setAngle((prev) => prev + delta);
           onRotate?.(delta);
         }
+        return;
+      }
+
+      if (line.startsWith("JOY:")) {
+        const raw = line.split(":")[1] ?? "";
+        const [xs, ys] = raw.split(",");
+        const x = parseInt(xs ?? "", 10);
+        const y = parseInt(ys ?? "", 10);
+        if (!Number.isNaN(x) && !Number.isNaN(y)) onJoy?.(x, y);
+        return;
+      }
+
+      if (line.startsWith("JOYBTN")) {
+        onJoyBtn?.();
+        return;
+      }
+
+      if (line.startsWith("BTN3")) {
+        onBtn3?.();
         return;
       }
 
@@ -114,7 +156,7 @@ export function useKnobSerial({ onRotate, onBtn, onBtn2 }: Handlers = {}) {
         onBtn?.();
       }
     },
-    [onRotate, onBtn, onBtn2]
+    []
   );
 
   const connect = React.useCallback(async () => {

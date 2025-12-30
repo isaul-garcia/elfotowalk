@@ -1,40 +1,54 @@
-// Rotary encoder to serial bridge for KY-040 style modules.
-// Sends "ROT:+1" or "ROT:-1" for each detent and "BTN:1" on button press.
+// Rotary encoder + joystick + extra buttons → serial bridge.
+// UNO pin map (adjust if you rewired):
+//   Encoder CLK → D2, DT → D3, SW → D4
+//   Joystick X → A0, Y → A1, SW → D5
+//   Extra buttons → D6, D7
+// Emits:
+//   ROT:+1 / ROT:-1     (encoder turns)
+//   BTN:1               (encoder push)
+//   BTN2:1              (extra button on D6)
+//   BTN3:1              (extra button on D7)
+//   JOYBTN:1            (joystick push)
+//   JOY:<x>,<y>         (joystick axes, 0–1023), only when moved past a threshold
 
-// Update these three to match your ESP8266 pins.
-// For NodeMCU/D1 mini: GPIO14 (D5), GPIO12 (D6), GPIO13 (D7).
-// If your board core doesn't define D5/D6/D7 names, the defines below provide them.
-#ifndef D5
-#define D5 14
-#endif
-#ifndef D6
-#define D6 12
-#endif
-#ifndef D7
-#define D7 13
-#endif
-#ifndef D1
-#define D1 5
-#endif
-const int clkPin = D5; // CLK on encoder
-const int dtPin  = D6; // DT on encoder
-const int swPin  = D7; // SW (push button)
-const int sw2Pin = D1; // second button
+const int clkPin = 2;   // encoder CLK
+const int dtPin  = 3;   // encoder DT
+const int swPin  = 4;   // encoder push button
 
-const bool debugPins = true; // print raw pin states once per second to verify wiring
+const int joyXPin = A0; // joystick X
+const int joyYPin = A1; // joystick Y
+const int joyBtnPin = 5;// joystick push
+
+const int btn2Pin = 6;  // extra button 1
+const int btn3Pin = 7;  // extra button 2
+
+const bool debugPins = false; // set true to print raw pin states once per second
 unsigned long lastDebugMs = 0;
 
 int lastClk = LOW;
 unsigned long lastButtonMs = 0;
 unsigned long lastButton2Ms = 0;
+unsigned long lastButton3Ms = 0;
+unsigned long lastJoyBtnMs = 0;
 const unsigned long debounceMs = 80;
+
+// Joystick change reporting
+int lastJoyX = -1;
+int lastJoyY = -1;
+unsigned long lastJoyMs = 0;
+unsigned long lastJoyEmitMs = 0;
+const unsigned long joyPollMs = 20;     // read joystick every 20 ms
+const unsigned long joyMinEmitMs = 120; // force emit even if unchanged
+const int joyDelta = 8;                 // min delta to consider movement
 
 void setup() {
   // Pull-ups keep the encoder lines stable at HIGH until a detent closes to GND.
   pinMode(clkPin, INPUT_PULLUP);
   pinMode(dtPin, INPUT_PULLUP);
   pinMode(swPin, INPUT_PULLUP); // internal pull-up for the button
-  pinMode(sw2Pin, INPUT_PULLUP); // second button
+  pinMode(btn2Pin, INPUT_PULLUP); // extra button 1
+  pinMode(btn3Pin, INPUT_PULLUP); // extra button 2
+  pinMode(joyBtnPin, INPUT_PULLUP);
   Serial.begin(115200);
   Serial.println("READY");
   lastClk = digitalRead(clkPin);
@@ -53,19 +67,44 @@ void loop() {
   }
   lastClk = currentClk;
 
-  // Button press (active LOW)
-  if (digitalRead(swPin) == LOW) {
-    unsigned long now = millis();
-    if (now - lastButtonMs > debounceMs) {
-      Serial.println("BTN:1");
-      lastButtonMs = now;
-    }
+  // Buttons (active LOW)
+  unsigned long now = millis();
+  if (digitalRead(swPin) == LOW && now - lastButtonMs > debounceMs) {
+    Serial.println("BTN:1");
+    lastButtonMs = now;
   }
-  if (digitalRead(sw2Pin) == LOW) {
-    unsigned long now = millis();
-    if (now - lastButton2Ms > debounceMs) {
-      Serial.println("BTN2:1");
-      lastButton2Ms = now;
+  if (digitalRead(btn2Pin) == LOW && now - lastButton2Ms > debounceMs) {
+    Serial.println("BTN2:1");
+    lastButton2Ms = now;
+  }
+  if (digitalRead(btn3Pin) == LOW && now - lastButton3Ms > debounceMs) {
+    Serial.println("BTN3:1");
+    lastButton3Ms = now;
+  }
+  if (digitalRead(joyBtnPin) == LOW && now - lastJoyBtnMs > debounceMs) {
+    Serial.println("JOYBTN:1");
+    lastJoyBtnMs = now;
+  }
+
+  // Joystick axes: emit when moved enough or on a periodic refresh
+  if (now - lastJoyMs >= joyPollMs) {
+    lastJoyMs = now;
+    int x = analogRead(joyXPin);
+    int y = analogRead(joyYPin);
+
+    if (lastJoyX < 0) { lastJoyX = x; }
+    if (lastJoyY < 0) { lastJoyY = y; }
+
+    bool changed = (abs(x - lastJoyX) > joyDelta) || (abs(y - lastJoyY) > joyDelta);
+    bool timeToRefresh = (now - lastJoyEmitMs) > joyMinEmitMs;
+    if (changed || timeToRefresh) {
+      lastJoyX = x;
+      lastJoyY = y;
+      lastJoyEmitMs = now;
+      Serial.print("JOY:");
+      Serial.print(x);
+      Serial.print(",");
+      Serial.println(y);
     }
   }
 
@@ -77,6 +116,12 @@ void loop() {
     Serial.print(" DT:");
     Serial.print(digitalRead(dtPin));
     Serial.print(" SW:");
-    Serial.println(digitalRead(swPin));
+    Serial.print(digitalRead(swPin));
+    Serial.print(" BTN2:");
+    Serial.print(digitalRead(btn2Pin));
+    Serial.print(" BTN3:");
+    Serial.print(digitalRead(btn3Pin));
+    Serial.print(" JOYBTN:");
+    Serial.println(digitalRead(joyBtnPin));
   }
 }
