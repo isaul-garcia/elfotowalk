@@ -541,6 +541,42 @@ h3 {
   display: none;
 }
 
+.insta-buttons {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #000;
+  text-decoration: none;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  border: 1px solid #c8c8c8;
+  cursor: pointer;
+  transform: translateY(2px);
+}
+.insta-buttons + br + .insta-buttons {
+  margin-top: 8px;
+}
+.insta-icon {
+  width: 16px;
+  height: 16px;
+}
+.spacing {
+  padding: 0 6px;
+  font-style: normal;
+}
+.spacing::before {
+  content: "|";
+}
+
+.parag-titulo {
+  font-size: larger;
+  font-weight: 600;
+}
+.parag-paraf {
+  font-size: large;
+}
+
 /* ── Names as bottom sheet on mobile ───────────────────── */
 @media (max-width: 768px) {
   .sticky-bottom {
@@ -633,5 +669,12 @@ h3 {
     height: 20vh;
     margin: 10vw;
     display: block;
+  }
+  .spacing {
+    padding: 4px;
+    display: block;
+  }
+  .spacing::before {
+    content: "";
   }
 }

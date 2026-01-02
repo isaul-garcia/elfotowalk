@@ -10,6 +10,7 @@ import * as THREE from "three";
 import "./AxonStack.css"
 import fotowalkLogo from "../../assets/EF3_TYPE.png";
 import shortLogo from "../../assets/endmarks_short_logo.png";
+import instagramIcon from "../../assets/instagram-icon.svg";
 import LoaderOverlay from "../LoaderOverlay/LoaderOverlay";
 import { wireLoadingGate } from "../LoaderOverlay/LoadingGate";
 import { useKnobSerial } from "../../hooks/useKnobSerial";
@@ -740,9 +741,20 @@ export default function ClickableAxonStackDebug() {
             className={`axon-info ${infoOpen ? "is-open" : ""}`}
           >
             <span>
-              <p>Bienvenidos al archivo oficial de<br></br>El Fotowalk 003: PONCE.</p>
-              <p>Aquí compartimos muchas de las fotos que capturaron. Mientras mirábamos estas fotos sentimos que pudimos conocer a cada uno de ustedes un poco más. Gracias por siempre llegarle y hacer que El Fotowalk sea un evento especial para la comunidad creativa de Puerto Rico.</p>
-              <p>att. andrés y portu</p>
+              <p className="parag-titulo">Bienvenidos al archivo oficial de<br></br>El Fotowalk 003: PONCE.</p>
+              <p className="parag-paraf">Aquí compartimos muchas de las fotos que capturaron. Mientras mirábamos estas fotos sentimos que pudimos conocer a cada uno de ustedes un poco más. Gracias por siempre llegarle y hacer que El Fotowalk sea un evento especial para la comunidad creativa de Puerto Rico.</p>
+              <p className="parag-paraf">att. andrés y portu</p>
+              <br></br>
+              <br></br>
+              <p>
+                Mas sobre nosotros <a className="insta-buttons" href="https://www.instagram.com/emco.system" target="_blank" rel="noreferrer">
+                  <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
+                  <strong>emcosystem</strong>
+                </a> <i className="spacing" aria-hidden="true"></i> Website por <a className="insta-buttons" href="https://www.instagram.com/dobleuustudio" target="_blank" rel="noreferrer">
+                  <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
+                  <strong>dobleuu</strong>
+                </a>
+              </p>
             </span>
           </div>
         </>
@@ -818,44 +830,44 @@ export default function ClickableAxonStackDebug() {
 
             {/* DESKTOP ARROWS */}
             {!isMobile && (
-             <div className="axon-expanded__arrows axon-expanded__arrows--desktop">
-             <button
-               className="axon-expanded__arrowBtn"
-               aria-label="Previous"
-               onClick={(e) => {
-                 e.stopPropagation();
-                 // mimic pressing the Left Arrow
-                 window.dispatchEvent(
-                   new KeyboardEvent("keydown", {
-                     key: "ArrowLeft",
-                     code: "ArrowLeft",
-                     bubbles: true,
-                   })
-                 );
-               }}
-             >
-               ←
-             </button>
-           
-             <button
-               className="axon-expanded__arrowBtn"
-               aria-label="Next"
-               onClick={(e) => {
-                 e.stopPropagation();
-                 // mimic pressing the Right Arrow
-                 window.dispatchEvent(
-                   new KeyboardEvent("keydown", {
-                     key: "ArrowRight",
-                     code: "ArrowRight",
-                     bubbles: true,
-                   })
-                 );
-               }}
-             >
-               →
-             </button>
-           </div>
-           
+              <div className="axon-expanded__arrows axon-expanded__arrows--desktop">
+                <button
+                  className="axon-expanded__arrowBtn"
+                  aria-label="Previous"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // mimic pressing the Left Arrow
+                    window.dispatchEvent(
+                      new KeyboardEvent("keydown", {
+                        key: "ArrowLeft",
+                        code: "ArrowLeft",
+                        bubbles: true,
+                      })
+                    );
+                  }}
+                >
+                  ←
+                </button>
+
+                <button
+                  className="axon-expanded__arrowBtn"
+                  aria-label="Next"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // mimic pressing the Right Arrow
+                    window.dispatchEvent(
+                      new KeyboardEvent("keydown", {
+                        key: "ArrowRight",
+                        code: "ArrowRight",
+                        bubbles: true,
+                      })
+                    );
+                  }}
+                >
+                  →
+                </button>
+              </div>
+
             )}
 
             <div className="axon-expanded__name">{expandedName.name}</div>{expandedInfo && (
