@@ -537,6 +537,9 @@ h3 {
   line-height: 1.35;
   text-align: left;
 }
+.axon-knob {
+  display: none;
+}
 
 /* ── Names as bottom sheet on mobile ───────────────────── */
 @media (max-width: 768px) {
@@ -629,5 +632,6 @@ h3 {
     width: 80vw;
     height: 20vh;
     margin: 10vw;
+    display: block;
   }
 }
