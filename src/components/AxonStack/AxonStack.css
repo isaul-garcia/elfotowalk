@@ -554,11 +554,11 @@ a{
   height: 16px;
 }
 .spacing {
-  padding: 0 6px;
+  padding: 0 3px;
   font-style: normal;
 }
 .spacing::before {
-  content: "|";
+  content: "·";
 }
 
 .parag-titulo {
@@ -577,8 +577,9 @@ a{
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 1px;
   z-index: 12;
+  color: #444;
 }
 
 /* ── Names as bottom sheet on mobile ───────────────────── */
