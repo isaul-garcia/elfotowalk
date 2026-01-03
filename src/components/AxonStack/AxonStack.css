@@ -12,6 +12,9 @@ h2,
 h3 {
   font-family: "Figtree", sans-serif;
 }
+a{
+  color: #0000ff;
+}
 
 /* Container: names list (bottom-right) */
 .axon-names {
@@ -399,8 +402,47 @@ h3 {
 .ab-r {
   right: 40px;
 }
+.axon-burger.ab-l {
+  width: 50px;
+  height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  overflow: hidden;
+}
+.axon-info__i {
+  display: inline-block;
+  font-size: 18px;
+  line-height: 1;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.axon-burger.ab-l.is-active .axon-info__i {
+  opacity: 0;
+  transform: scale(0.6);
+}
+.axon-info__xline {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  background: #111;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+.axon-burger.ab-l.is-active .axon-info__xline {
+  opacity: 1;
+}
+.axon-info__xline--1 {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+.axon-info__xline--2 {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
 
-.axon-burger span {
+.axon-burger:not(.ab-l) span {
   display: block;
   width: 20px;
   height: 2px;
@@ -409,14 +451,14 @@ h3 {
   transition: transform 0.2s ease, opacity 0.2s ease;
   overflow: visible;
 }
-.axon-burger.is-active span:nth-child(1) {
+.axon-burger.is-active:not(.ab-l) span:nth-child(1) {
   transform: translateY(6px) rotate(45deg);
 }
-.axon-burger.is-active span:nth-child(2) {
+.axon-burger.is-active:not(.ab-l) span:nth-child(2) {
   opacity: 0;
   background: #fff;
 }
-.axon-burger.is-active span:nth-child(3) {
+.axon-burger.is-active:not(.ab-l) span:nth-child(3) {
   transform: translateY(-6px) rotate(-45deg);
 }
 
@@ -525,6 +567,18 @@ h3 {
 }
 .parag-paraf {
   font-size: large;
+}
+.parag-links {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 20vh; /* anchor 20% up from the bottom of the viewport */
+  text-align: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  z-index: 12;
 }
 
 /* ── Names as bottom sheet on mobile ───────────────────── */

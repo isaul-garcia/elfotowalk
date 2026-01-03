@@ -545,10 +545,12 @@ export default function ClickableAxonStackDebug() {
         <>
           <button
             className={`axon-burger ab-l ${infoOpen ? "is-active" : ""}`}
-            aria-label="Open photographers"
+            aria-label={infoOpen ? "Close info" : "Open info"}
             onClick={() => setInfoOpen((v) => !v)}
           >
-            𝓲
+            <span className="axon-info__i" aria-hidden={infoOpen}>𝓲</span>
+            <span className="axon-info__xline axon-info__xline--1" aria-hidden={!infoOpen}></span>
+            <span className="axon-info__xline axon-info__xline--2" aria-hidden={!infoOpen}></span>
           </button>
 
           <div
@@ -560,15 +562,17 @@ export default function ClickableAxonStackDebug() {
               <p className="parag-paraf">att. andrés y portu</p>
               <br></br>
               <br></br>
-              <p>
-                Mas sobre nosotros <a className="insta-buttons" href="https://www.instagram.com/emco.system" target="_blank" rel="noreferrer">
-                  <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
-                  <strong>emcosystem</strong>
-                </a> <i className="spacing" aria-hidden="true"></i> Website por <a className="insta-buttons" href="https://www.instagram.com/dobleuustudio" target="_blank" rel="noreferrer">
-                  <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
-                  <strong>dobleuu</strong>
-                </a>
-              </p>
+              <div className="parag-links">
+                <p>
+                  Mas sobre nosotros <a className="insta-buttons" href="https://www.instagram.com/emco.system" target="_blank" rel="noreferrer">
+                    <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
+                    <strong>emcosystem</strong>
+                  </a> <i className="spacing" aria-hidden="true"></i> Website por <a className="insta-buttons" href="https://www.instagram.com/dobleuustudio" target="_blank" rel="noreferrer">
+                    <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
+                    <strong>dobleuu</strong>
+                  </a>
+                </p>
+              </div>
             </span>
           </div>
         </>
