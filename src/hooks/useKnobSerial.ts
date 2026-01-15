@@ -21,6 +21,7 @@ type Handlers = {
   onBtn?: () => void;
   onBtn2?: () => void;
   onBtn3?: () => void;
+  onBtn4?: () => void;
   onJoy?: (x: number, y: number) => void;
   onJoyBtn?: () => void;
 };
@@ -59,6 +60,7 @@ export function useKnobSerial({
   onBtn,
   onBtn2,
   onBtn3,
+  onBtn4,
   onJoy,
   onJoyBtn,
 }: Handlers = {}) {
@@ -73,6 +75,7 @@ export function useKnobSerial({
     onBtn,
     onBtn2,
     onBtn3,
+    onBtn4,
     onJoy,
     onJoyBtn,
   });
@@ -80,8 +83,8 @@ export function useKnobSerial({
   const supportsSerial = React.useMemo(hasSerial, []);
 
   React.useEffect(() => {
-    handlersRef.current = { onRotate, onBtn, onBtn2, onBtn3, onJoy, onJoyBtn };
-  }, [onRotate, onBtn, onBtn2, onBtn3, onJoy, onJoyBtn]);
+    handlersRef.current = { onRotate, onBtn, onBtn2, onBtn3, onBtn4, onJoy, onJoyBtn };
+  }, [onRotate, onBtn, onBtn2, onBtn3, onBtn4, onJoy, onJoyBtn]);
 
   const cleanupReader = React.useCallback(async () => {
     if (readerRef.current) {
@@ -116,7 +119,7 @@ export function useKnobSerial({
 
   const handleLine = React.useCallback(
     (line: string) => {
-      const { onRotate, onBtn, onBtn2, onBtn3, onJoy, onJoyBtn } = handlersRef.current;
+      const { onRotate, onBtn, onBtn2, onBtn3, onBtn4, onJoy, onJoyBtn } = handlersRef.current;
       if (!line) return;
       if (line.startsWith("ROT:")) {
         const raw = line.split(":")[1] ?? "";
@@ -144,6 +147,11 @@ export function useKnobSerial({
 
       if (line.startsWith("BTN3")) {
         onBtn3?.();
+        return;
+      }
+
+      if (line.startsWith("BTN4")) {
+        onBtn4?.();
         return;
       }
 

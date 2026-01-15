@@ -179,6 +179,7 @@ type StackNavApi = {
   stepExpandedDesktop?: (step: -1 | 1) => void;
   stepExpanded: (step: -1 | 1) => void;
   expandCentered: () => void;
+  toggleStageExpandCentered: () => void;
 };
 
 const StackScrollContext = React.createContext<StackCtx>(null);
@@ -221,6 +222,9 @@ export default function ClickableAxonStackDebug() {
   const nameButtonRefs = useRef<HTMLButtonElement[]>([]);
   const [knobHoverIdx, setKnobHoverIdx] = useState(0);
   const knobClickTsRef = useRef<number>(0);
+  const btn2ClickTsRef = useRef<number>(0);
+  const btn3ClickTsRef = useRef<number>(0);
+  const btn4ClickTsRef = useRef<number>(0);
 
   useEffect(() => {
     const el = namesListRef.current;
@@ -529,7 +533,12 @@ export default function ClickableAxonStackDebug() {
       const isActive = centeredIdx >= start && centeredIdx <= end;
 
       if (isActive) {
-        navApiRef.current?.expandCentered();
+        // Keep knob press focused on name navigation, not expansion.
+        const btn = nameButtonRefs.current[knobHoverIdx];
+        if (btn) {
+          btn.scrollIntoView({ block: "nearest", inline: "nearest" });
+          btn.click();
+        }
         return;
       }
     }
@@ -546,44 +555,36 @@ export default function ClickableAxonStackDebug() {
     selectGroup(start, end);
   }, [ANCHORS, centeredIdx, knobHoverIdx, selectGroup]);
 
-  const dispatchArrow = useCallback((dir: "left" | "right") => {
-    const key = dir === "left" ? "ArrowLeft" : "ArrowRight";
-    const code = key;
-    const keyCode = dir === "left" ? 37 : 39;
-
-    const makeEvent = (type: "keydown" | "keyup") => {
-      const ev = new KeyboardEvent(type, {
-        key,
-        code,
-        bubbles: true,
-        cancelable: true,
-      });
-      Object.defineProperty(ev, "keyCode", { get: () => keyCode });
-      Object.defineProperty(ev, "which", { get: () => keyCode });
-      Object.defineProperty(ev, "repeat", { get: () => false });
-      return ev;
-    };
-
-    // Dispatch keydown then keyup to mimic a full key press cycle
-    window.dispatchEvent(makeEvent("keydown"));
-    window.dispatchEvent(makeEvent("keyup"));
-  }, []);
-
   const handleKnobBtn2 = useCallback(() => {
-    if (expandedIdx == null) return;
     const now = performance.now();
-    if (now - knobClickTsRef.current < 200) return;
-    knobClickTsRef.current = now;
-    dispatchArrow("left");
-  }, [expandedIdx, dispatchArrow]);
+    if (now - btn2ClickTsRef.current < 180) return;
+    btn2ClickTsRef.current = now;
+    const step =
+      (isMobile ? navApiRef.current?.stepExpanded : navApiRef.current?.stepExpandedDesktop) ??
+      navApiRef.current?.stepExpanded;
+    step?.(-1);
+  }, [isMobile]);
+
+  const handleKnobBtn4 = useCallback(() => {
+    const now = performance.now();
+    if (now - btn4ClickTsRef.current < 180) return;
+    btn4ClickTsRef.current = now;
+    if (DEBUG) {
+      // eslint-disable-next-line no-console
+      console.log("[axon] BTN4 pressed");
+    }
+    const step =
+      (isMobile ? navApiRef.current?.stepExpanded : navApiRef.current?.stepExpandedDesktop) ??
+      navApiRef.current?.stepExpanded;
+    step?.(1);
+  }, [isMobile]);
 
   const handleKnobBtn3 = useCallback(() => {
-    if (expandedIdx == null) return;
     const now = performance.now();
-    if (now - knobClickTsRef.current < 200) return;
-    knobClickTsRef.current = now;
-    dispatchArrow("right");
-  }, [expandedIdx, dispatchArrow]);
+    if (now - btn3ClickTsRef.current < 180) return;
+    btn3ClickTsRef.current = now;
+    navApiRef.current?.toggleStageExpandCentered?.();
+  }, []);
 
   const joystickToVelocity = useCallback((xRaw: number) => {
     const n = Math.max(-1, Math.min(1, (xRaw - JOY_CENTER) / JOY_RANGE));
@@ -617,6 +618,7 @@ export default function ClickableAxonStackDebug() {
     onRotate: handleKnobRotate,
     onBtn: handleKnobClick,
     onBtn2: handleKnobBtn2,
+    onBtn4: handleKnobBtn4,
     onBtn3: handleKnobBtn3,
     onJoy: (x) => handleJoystick(x),
   });
@@ -746,15 +748,20 @@ export default function ClickableAxonStackDebug() {
               <p className="parag-paraf">att. andrés y portu</p>
               <br></br>
               <br></br>
-              <p>
-                Mas sobre nosotros <a className="insta-buttons" href="https://www.instagram.com/emco.system" target="_blank" rel="noreferrer">
-                  <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
-                  <strong>emcosystem</strong>
-                </a> <i className="spacing" aria-hidden="true"></i> Website por <a className="insta-buttons" href="https://www.instagram.com/dobleuustudio" target="_blank" rel="noreferrer">
-                  <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
-                  <strong>dobleuu</strong>
-                </a>
-              </p>
+              <div className="parag-links">
+                <p>
+                  Este website es una colaboración entre<br></br>
+                  <a className="insta-buttons" href="https://www.instagram.com/emco.system" target="_blank" rel="noreferrer">
+                    <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
+                    <strong>emcosystem</strong>
+                  </a>
+                  <i className="spacing" aria-hidden="true"></i>
+                  <a className="insta-buttons" href="https://www.instagram.com/dobleuustudio" target="_blank" rel="noreferrer">
+                    <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
+                    <strong>dobleuu studio</strong>
+                  </a>
+                </p>
+              </div>
             </span>
           </div>
         </>
@@ -1878,8 +1885,18 @@ function LocalZScroller({
     if ((expandedIndexRef.current ?? null) == null) return;
 
     const maxIdx = Math.max(0, (planes ?? 1) - 1);
-    const current = centerIndexRef.current ?? 0;
+    const current = expandedIndexRef.current ?? centerIndexRef.current ?? 0;
     const next = Math.max(0, Math.min(maxIdx, current + step));
+    if (DEBUG) {
+      // eslint-disable-next-line no-console
+      console.log("[axon] stepExpanded", {
+        step,
+        current,
+        next,
+        maxIdx,
+        expandedIndex: expandedIndexRef.current,
+      });
+    }
 
     // 1) Jump stack immediately
     jumpToIndexImmediate(next);
@@ -1963,6 +1980,25 @@ function LocalZScroller({
 
         if (expandedNow === current) {
           setExpandedIndex(null);
+          return;
+        }
+
+        lastExpandedIndexRef.current = expandedNow;
+        expandedSwitchLockRef.current = 4;
+        setExpandedIndex(current);
+      },
+      toggleStageExpandCentered: () => {
+        const current = clampIndex(centerIndexRef.current ?? 0);
+        const expandedNow = expandedIndexRef.current ?? null;
+        if (expandedNow !== null) {
+          setExpandedIndex(null);
+          return;
+        }
+
+        const stagedIdx = stagedIndexRef.current;
+        const hasStage = stagedIdx === current && (stageGapRef.current ?? 0) > 0;
+        if (!hasStage) {
+          stageAt(current, 2);
           return;
         }
 
@@ -2231,8 +2267,18 @@ function LocalZScroller({
     if ((expandedIndexRef.current ?? null) == null) return;
 
     const maxIdx = Math.max(0, (planes ?? 1) - 1);
-    const current = centerIndexRef.current ?? 0;
+    const current = expandedIndexRef.current ?? centerIndexRef.current ?? 0;
     const next = Math.max(0, Math.min(maxIdx, current + step));
+    if (DEBUG) {
+      // eslint-disable-next-line no-console
+      console.log("[axon] stepExpandedDesktop", {
+        step,
+        current,
+        next,
+        maxIdx,
+        expandedIndex: expandedIndexRef.current,
+      });
+    }
 
     // keep center in sync immediately to avoid jitter
     (centerIndexRef as any).prev = next;
@@ -2294,7 +2340,20 @@ function KeyboardNavigator({ planes }: { planes: number }) {
   const ctx = useContext(StackScrollContext);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (DEBUG) {
+        // Track both hardware and synthetic arrow events.
+        // eslint-disable-next-line no-console
+        console.log("[axon] key event", {
+          type: e.type,
+          key: e.key,
+          code: e.code,
+          keyCode: (e as any).keyCode,
+          which: (e as any).which,
+          repeat: (e as any).repeat,
+          expandedIndex: ctx?.expandedIndexRef?.current ?? null,
+        });
+      }
       // ignore while typing or with modifiers
       const t = e.target as HTMLElement | null;
       const isTyping =
@@ -2316,8 +2375,26 @@ function KeyboardNavigator({ planes }: { planes: number }) {
       }
     };
 
-    window.addEventListener("keydown", onKey, { passive: false });
-    return () => window.removeEventListener("keydown", onKey);
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!DEBUG) return;
+      // eslint-disable-next-line no-console
+      console.log("[axon] key event", {
+        type: e.type,
+        key: e.key,
+        code: e.code,
+        keyCode: (e as any).keyCode,
+        which: (e as any).which,
+        repeat: (e as any).repeat,
+        expandedIndex: ctx?.expandedIndexRef?.current ?? null,
+      });
+    };
+
+    window.addEventListener("keydown", onKeyDown, { passive: false });
+    window.addEventListener("keyup", onKeyUp, { passive: true });
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, [ctx]);
 
   return null;

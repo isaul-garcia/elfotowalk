@@ -5,6 +5,7 @@ type ButtonState = {
   encoder: number;
   btn2: number;
   btn3: number;
+  btn4: number;
   joyBtn: number;
 };
 
@@ -14,6 +15,7 @@ export default function ControlsTester() {
     encoder: 0,
     btn2: 0,
     btn3: 0,
+    btn4: 0,
     joyBtn: 0,
   });
   const [joy, setJoy] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -43,6 +45,10 @@ export default function ControlsTester() {
     onBtn3: () => {
       setButtons((b) => ({ ...b, btn3: b.btn3 + 1 }));
       push("BTN3");
+    },
+    onBtn4: () => {
+      setButtons((b) => ({ ...b, btn4: b.btn4 + 1 }));
+      push("BTN4");
     },
     onJoyBtn: () => {
       setButtons((b) => ({ ...b, joyBtn: b.joyBtn + 1 }));
@@ -81,6 +87,7 @@ export default function ControlsTester() {
             <Chip label="Encoder" value={buttons.encoder} />
             <Chip label="BTN2" value={buttons.btn2} />
             <Chip label="BTN3" value={buttons.btn3} />
+            <Chip label="BTN4" value={buttons.btn4} />
             <Chip label="JOYBTN" value={buttons.joyBtn} />
           </div>
         </div>

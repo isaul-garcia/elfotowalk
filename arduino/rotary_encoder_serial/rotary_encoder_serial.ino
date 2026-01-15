@@ -2,12 +2,13 @@
 // UNO pin map (adjust if you rewired):
 //   Encoder CLK → D2, DT → D3, SW → D4
 //   Joystick X → A0, Y → A1, SW → D5
-//   Extra buttons → D6, D7
+//   Extra buttons → D6, D7, D8
 // Emits:
 //   ROT:+1 / ROT:-1     (encoder turns)
 //   BTN:1               (encoder push)
 //   BTN2:1              (extra button on D6)
 //   BTN3:1              (extra button on D7)
+//   BTN4:1              (extra button on D8)
 //   JOYBTN:1            (joystick push)
 //   JOY:<x>,<y>         (joystick axes, 0–1023), only when moved past a threshold
 
@@ -21,6 +22,7 @@ const int joyBtnPin = 5;// joystick push
 
 const int btn2Pin = 6;  // extra button 1
 const int btn3Pin = 7;  // extra button 2
+const int btn4Pin = 8;  // extra button 3
 
 const bool debugPins = false; // set true to print raw pin states once per second
 unsigned long lastDebugMs = 0;
@@ -29,8 +31,14 @@ int lastClk = LOW;
 unsigned long lastButtonMs = 0;
 unsigned long lastButton2Ms = 0;
 unsigned long lastButton3Ms = 0;
+unsigned long lastButton4Ms = 0;
 unsigned long lastJoyBtnMs = 0;
 const unsigned long debounceMs = 80;
+int lastSwState = HIGH;
+int lastBtn2State = HIGH;
+int lastBtn3State = HIGH;
+int lastBtn4State = HIGH;
+int lastJoyBtnState = HIGH;
 
 // Joystick change reporting
 int lastJoyX = -1;
@@ -48,6 +56,7 @@ void setup() {
   pinMode(swPin, INPUT_PULLUP); // internal pull-up for the button
   pinMode(btn2Pin, INPUT_PULLUP); // extra button 1
   pinMode(btn3Pin, INPUT_PULLUP); // extra button 2
+  pinMode(btn4Pin, INPUT_PULLUP); // extra button 3
   pinMode(joyBtnPin, INPUT_PULLUP);
   Serial.begin(115200);
   Serial.println("READY");
@@ -69,22 +78,40 @@ void loop() {
 
   // Buttons (active LOW)
   unsigned long now = millis();
-  if (digitalRead(swPin) == LOW && now - lastButtonMs > debounceMs) {
+  int swState = digitalRead(swPin);
+  if (swState == LOW && lastSwState == HIGH && now - lastButtonMs > debounceMs) {
     Serial.println("BTN:1");
     lastButtonMs = now;
   }
-  if (digitalRead(btn2Pin) == LOW && now - lastButton2Ms > debounceMs) {
+  lastSwState = swState;
+
+  int btn2State = digitalRead(btn2Pin);
+  if (btn2State == LOW && lastBtn2State == HIGH && now - lastButton2Ms > debounceMs) {
     Serial.println("BTN2:1");
     lastButton2Ms = now;
   }
-  if (digitalRead(btn3Pin) == LOW && now - lastButton3Ms > debounceMs) {
+  lastBtn2State = btn2State;
+
+  int btn3State = digitalRead(btn3Pin);
+  if (btn3State == LOW && lastBtn3State == HIGH && now - lastButton3Ms > debounceMs) {
     Serial.println("BTN3:1");
     lastButton3Ms = now;
   }
-  if (digitalRead(joyBtnPin) == LOW && now - lastJoyBtnMs > debounceMs) {
+  lastBtn3State = btn3State;
+
+  int btn4State = digitalRead(btn4Pin);
+  if (btn4State == LOW && lastBtn4State == HIGH && now - lastButton4Ms > debounceMs) {
+    Serial.println("BTN4:1");
+    lastButton4Ms = now;
+  }
+  lastBtn4State = btn4State;
+
+  int joyBtnState = digitalRead(joyBtnPin);
+  if (joyBtnState == LOW && lastJoyBtnState == HIGH && now - lastJoyBtnMs > debounceMs) {
     Serial.println("JOYBTN:1");
     lastJoyBtnMs = now;
   }
+  lastJoyBtnState = joyBtnState;
 
   // Joystick axes: emit when moved enough or on a periodic refresh
   if (now - lastJoyMs >= joyPollMs) {
@@ -121,6 +148,8 @@ void loop() {
     Serial.print(digitalRead(btn2Pin));
     Serial.print(" BTN3:");
     Serial.print(digitalRead(btn3Pin));
+    Serial.print(" BTN4:");
+    Serial.print(digitalRead(btn4Pin));
     Serial.print(" JOYBTN:");
     Serial.println(digitalRead(joyBtnPin));
   }
