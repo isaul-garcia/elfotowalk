@@ -545,6 +545,7 @@ a{
   border: 1px solid #c8c8c8;
   cursor: pointer;
   transform: translateY(2px);
+  margin-top: 14px;
 }
 .insta-buttons + br + .insta-buttons {
   margin-top: 8px;
@@ -554,11 +555,11 @@ a{
   height: 16px;
 }
 .spacing {
-  padding: 0 3px;
+  padding: 0 6px;
   font-style: normal;
 }
 .spacing::before {
-  content: "·";
+  content: "✕";
 }
 
 .parag-titulo {

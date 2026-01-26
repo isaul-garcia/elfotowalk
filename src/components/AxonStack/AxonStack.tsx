@@ -564,12 +564,15 @@ export default function ClickableAxonStackDebug() {
               <br></br>
               <div className="parag-links">
                 <p>
-                  Mas sobre nosotros <a className="insta-buttons" href="https://www.instagram.com/emco.system" target="_blank" rel="noreferrer">
+                  Este website es una colaboración entre<br></br>
+                  <a className="insta-buttons" href="https://www.instagram.com/emco.system" target="_blank" rel="noreferrer">
                     <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
                     <strong>emcosystem</strong>
-                  </a> <i className="spacing" aria-hidden="true"></i> Website por <a className="insta-buttons" href="https://www.instagram.com/dobleuustudio" target="_blank" rel="noreferrer">
+                  </a>
+                  <i className="spacing" aria-hidden="true"></i>
+                  <a className="insta-buttons" href="https://www.instagram.com/dobleuustudio" target="_blank" rel="noreferrer">
                     <img className="insta-icon" src={instagramIcon} alt="" aria-hidden="true" />
-                    <strong>dobleuu</strong>
+                    <strong>dobleuu studio</strong>
                   </a>
                 </p>
               </div>
