@@ -1681,6 +1681,7 @@ function LocalZScroller({
     requestAnimationFrame(() => requestAnimationFrame(syncDomScrollToCurrentZ));
 
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const stepExpanded = useCallback((step: -1 | 1) => {
     if ((expandedIndexRef.current ?? null) == null) return;
 
