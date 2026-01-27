@@ -1700,7 +1700,28 @@ function LocalZScroller({
 
     // 4) Sync DOM scroll after layout has caught up
     syncDomScrollSoon();
-  }, [jumpToIndexImmediate, setExpandedIndex]);
+  }, [jumpToIndexImmediate, planes, setExpandedIndex, syncDomScrollSoon]);
+
+  const stepExpandedDesktop = useCallback((step: -1 | 1) => {
+    if ((expandedIndexRef.current ?? null) == null) return;
+
+    const maxIdx = Math.max(0, (planes ?? 1) - 1);
+    const current = centerIndexRef.current ?? 0;
+    const next = Math.max(0, Math.min(maxIdx, current + step));
+
+    // keep center in sync immediately to avoid jitter
+    (centerIndexRef as any).prev = next;
+    centerIndexRef.current = next;
+    navLockRef.current = 2;
+
+    // desktop route: let DOM scroll drive z (the “old way”)
+    centerOn(next);
+
+    // snap the expanded switch
+    lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
+    expandedSwitchLockRef.current = 4;
+    setExpandedIndex(next);
+  }, [planes, centerOn, setExpandedIndex]);
 
   useEffect(() => {
     if (!navApiExternalRef) return;
@@ -1774,7 +1795,7 @@ function LocalZScroller({
 
     navApiExternalRef.current = api;
     return () => { navApiExternalRef.current = null; };
-  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, stepExpanded]);
+  }, [navApiExternalRef, planes, centerOn, clearStage, groupRanges, stepExpanded, stepExpandedDesktop]);
 
   useEffect(() => {
     const el = (scroll as any).el as HTMLElement | undefined;
@@ -2019,28 +2040,6 @@ function LocalZScroller({
       }
     }
   });
-
-  const stepExpandedDesktop = useCallback((step: -1 | 1) => {
-    if ((expandedIndexRef.current ?? null) == null) return;
-
-    const maxIdx = Math.max(0, (planes ?? 1) - 1);
-    const current = centerIndexRef.current ?? 0;
-    const next = Math.max(0, Math.min(maxIdx, current + step));
-
-    // keep center in sync immediately to avoid jitter
-    (centerIndexRef as any).prev = next;
-    centerIndexRef.current = next;
-    navLockRef.current = 2;
-
-    // desktop route: let DOM scroll drive z (the “old way”)
-    centerOn(next);
-
-    // snap the expanded switch
-    lastExpandedIndexRef.current = expandedIndexRef.current ?? null;
-    expandedSwitchLockRef.current = 4;
-    setExpandedIndex(next);
-  }, [planes, centerOn, setExpandedIndex]);
-
 
   const contextValue = useMemo(
     () => ({
