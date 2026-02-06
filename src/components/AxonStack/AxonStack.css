@@ -662,7 +662,6 @@ a{
     display: contents;
     flex-direction: row;
   }
-
   .axon-expanded__arrows {
     display: inline-flex;
     gap: 8px;
@@ -681,5 +680,21 @@ a{
   }
   .spacing::before {
     content: "";
+  }
+  .parag-paraf {
+    font-size: medium;
+  }
+  .parag-links {
+    bottom: 15vh;
+  }
+  .parag-links > p {
+    font-size: smaller;
+  }
+  .insta-buttons {
+    margin-top: 0;
+  }
+  .parag-titulo {
+    margin-top: -25px;
+    font-size: 1.25rem;
   }
 }
